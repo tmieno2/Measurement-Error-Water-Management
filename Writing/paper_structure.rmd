@@ -1,0 +1,53 @@
+
+# Main
+
+
+
+# Results
+
+## ME in water use estiamtes based on energy
+
+## Quota  
+
+Energy quota relative to water quota
+
++ uniform allocation for both energy and water
+
+Things to look at:
+
++ Economic loss (gain) using 
++ Water use slack
+
+Comparative statics wrt 
+
++ the variance of the measurement error
++ heterogeneity of production function
+
+## Trading
+
++ Trading reduces profit loss
++ Reduces uncertainty in water use
+
+Measurement error is absorbed.
+
+## Incentive to improve energy use efficiency
+
++ Energy use looks the same! Trouble for the administrator.
++ But, water use has gone up
+
+## Fairness
+
+
+# Method
+
+## Data
+
+## Simulation 
+  
++ Heterogeneous farmers
+
+# Supplementary Appendix
+
+## More general results (other cases)
+
+

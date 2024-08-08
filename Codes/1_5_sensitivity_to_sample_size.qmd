@@ -1,0 +1,50 @@
+---
+title: Examine the sensitivity of the results to the sample size of water-energy data
+---
+
+# Objective
+
+Administrator of the quota system needs to learn the relationship between water and energy use to set the right quota to achieve water conservation target. 
+
+# Estimate energy use efficiency
+
+```{r}
+ne_data <-
+  readRDS(here::here("Data/water_energy_MW.rds")) %>%
+  .[nrdname != "Twin Platte", ] %>%
+  .[, me := water_est - volaf] %>%
+  .[, w_to_e := kwh / volaf] %>% # (kwh/feet)
+  .[, region := paste0(nrdname, " (Nebraska)")] %>%
+  .[w_to_e > 250, ] %>%
+  .[w_to_e < 1000, ]
+
+```
+
+```{r}
+
+unique_wells <- ne_data[, wellid] %>% unique()
+unique_years <- ne_data[, unique(year)]
+
+parameters <-
+  data.table::CJ(
+    case = 1:100,
+    well_nums = length(unique_wells) * c(0.01, 0.03, 0.05, 0.1, 0.2, 0.5),
+    year_nums = c(1, 3, 5, length(unique_years))
+  ) %>%
+  rowwise() %>%
+  dplyr::mutate(sample_wells = list(
+    sample(unique_wells, well_nums, replace = FALSE)
+  )) %>%
+  dplyr::mutate(sample_years = list(
+    sample(unique_years, year_nums, replace = FALSE)
+  )) %>%
+  dplyr::mutate(w_to_e_estimate = list(
+    ne_data[wellid %in% sample_wells, ] %>%
+    .[year %in% sample_years, ] %>%
+    .[, mean(w_to_e, na.rm = TRUE)]
+  )) %>%
+  dplyr::select(- sample_wells, - sample_years) %>%
+  unnest() %>%
+  data.table()
+```
+

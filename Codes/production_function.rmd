@@ -1,0 +1,116 @@
+# Data Preparation
+
+```{r}
+# Read in matlab data
+yield_water <- readMat("Data/ProductionFunction_October2017.mat")
+
+# Acess the data within the array
+yiedl_water_array <- yield_water$ProductionFunction.October2017
+```
+
+# Extract and transform data by variable
+
+Extracting crop yield and irrigation data from an array and compute expected value given an irrigation strategy
+
+```{r}
+#--------------------------
+# Yield
+#--------------------------
+yield_data <- yiedl_water_array[[1]] %>%
+  t() %>%
+  data.table() %>%
+  .[, smt := 1:nrow(.)] %>%
+  melt(id.var = "smt") %>%
+  setnames(c("variable", "value"), c("year", "yield")) %>%
+  .[, yield := yield / 0.06] %>%
+  .[, year := as.numeric(gsub("V", "", year))] %>%
+  setkey(smt, year)
+
+#--- Expected crop yield ---#
+e_yield <- yield_data[, .(e_yield = mean(yield)), by = smt] %>%
+  setkey(smt)
+
+#--------------------------
+# Irrigation
+#--------------------------
+irr_data <- yiedl_water_array[[2]] %>%
+  t() %>%
+  data.table() %>%
+  .[, smt := 1:nrow(.)] %>%
+  melt(id.var = "smt") %>%
+  setnames(c("variable", "value"), c("year", "ir")) %>%
+  .[, year := as.numeric(gsub("V", "", year))] %>%
+  .[, ir := ir * 0.0393701] %>%
+  setkey(smt, year)
+
+#--- expected irrigation ---#
+e_ir <- irr_data[, .(e_ir = mean(ir)), by = smt] %>%
+  setkey(smt)
+
+#--------------------------
+# Combine and save
+#--------------------------
+#--- raw data ---#
+raw_data <- yield_data[irr_data]
+```
+
+# Find the maximum yield by irrigation bin for each year
+
+```{r}
+year_ls <- raw_data[, year] %>% unique()
+prod_store <- list()
+
+for (y in year_ls) {
+  temp_data <- 
+    copy(raw_data[year == y, ]) %>%
+    .[, ir_bin := cut(ir, c(quantile(ir, prob = seq(0, 1, by = 0.05))) %>% unique())] %>%
+    .[, ir_bin := as.character(ir_bin)] %>%
+    .[is.na(ir_bin), ir_bin := "0"] %>%
+    .[, .(yield = max(yield), ir = mean(ir)), by = ir_bin] %>%
+    .[, ir_bin := NULL] %>%
+    #--- get rid of observations that saw a decline in yield  ---#
+    setorder(ir) %>%
+    .[, yield_prev := shift(yield, n = 1, type = "lag")] %>%
+    .[, dif := yield - yield_prev] %>%
+    .[dif > 0 | is.na(dif), ] %>%
+    .[, .(yield, ir)]
+
+  if (y == 11) { # special treatment for year 12
+    temp_data[ir == 0, yield := 194]
+  }
+  # g_reg <- ggplot(data=reg_data) +
+  # 	geom_point(aes(y=yield,x=ir))
+  # ggsave(g_reg,file=paste('./Figures/reg_data_y_',y,'.pdf',sep=''))
+
+  #--- augment data for a better fitting ---#
+  max_yield <- temp_data[, max(yield)]
+  max_ir <- temp_data[, max(ir)]
+  min_ir_data <- temp_data[ir == min(ir), ][rep(1, 5), ]
+  max_ir_data <- data.table(
+    yield = rep(max_yield, 15),
+    ir = max_ir + seq(0, max_ir * 0.2, length = 15)
+  )
+  reg_data <- rbind(min_ir_data, temp_data, max_ir_data)
+  prod_store[[as.character(y)]] <- scam(yield ~ s(ir, k = 7, bs = "micv"), data = reg_data)
+}
+
+saveRDS(prod_store, "Results/prod_fcn.rds")
+```
+
+
+# Visualize the production functions
+
+```{r}
+for (y in year_ls) {
+  temp_prod <- prod_store[[paste(y)]]
+  g_temp <- data.table(ir = seq(
+    floor(min(temp_prod$model$ir) * 100) / 100,
+    floor(max(temp_prod$model$ir) * 100) / 100,
+    by = 0.05
+  )) %>%
+    .[, y_hat := predict(temp_prod, newdata = .)] %>%
+    ggplot(data = .) +
+    geom_line(aes(y = y_hat, x = ir))
+  ggsave(g_temp, file = paste("Figures/production_function/prod_y_", y, ".pdf", sep = ""))
+}
+```

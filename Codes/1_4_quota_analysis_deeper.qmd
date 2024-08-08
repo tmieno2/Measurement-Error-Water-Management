@@ -1,0 +1,32 @@
+---
+title: Quota analysis
+---
+
+
+```{r}
+#| include: false
+load("Results/het_quota_analysis.Rdata")
+```
+
+
+# Water use
+
+Higher water use under energy-based regulation!!
+
+```{r}
+ggplot(quota_res) +
+  geom_line(aes(y = w, x = e_alloc_limit, color = inst_type))
+```
+
+
+# Profit
+
+```{r}
+ggplot(quota_res) +
+  geom_line(aes(y = profit, x = w_alloc_limit, color = inst_type))
+```
+
+
+
+
+

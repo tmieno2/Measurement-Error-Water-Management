@@ -1,0 +1,330 @@
+---
+title: Illustrative analysis of the impact of measurement errors
+---
+
+Initial analysis of the impact of measurement errors in water on welfare under quota and permit market. Farmers are assumed to be homogeneous (a special case of the analysis run later). 
+
+# Set up
+
+## Parameters
+
+```{r}
+#| include: false
+
+corn_price <- 6 # (bu/acre)
+w_price <- 0 # water itself is free
+e_price <- 0.15 # ($/kwh)
+other_cost <- 800 # ($/acre)
+
+#--- energy use efficiency ---#
+# factor converting water use to energy use (kwh/acre-inch)
+eta_ls <- c(300, 700)
+
+farmer_data <-
+  data.table(
+    farmer = c("A", "B"),
+    eta = eta_ls # kwh/inch
+  )
+#--- water use target ---#
+w_lim <- 20
+```
+
+Water is in inches. $\eta$ converts water in feet to kwh.
+
+$$
+E = \eta \times W / 12
+$$
+
+## Production data
+
+Generate yield as a functio of water use. It is assumed that the two farmers have the same yield response function. 
+
+$$
+Yield = ymax \times (1 - \alpha * e^{-\beta \times w})
+$$
+
+```{r}
+ymax <- 200
+alpha <- 0.8
+beta <- 0.3
+```
+
+Generate a dataset of yield, water use, energy use, energy use efficiency, energy cost, and profit by farmer.
+
+```{r}
+prod_data <-
+  data.table(w = seq(0, 16, by = 0.01)) %>%
+  #--- yield response function ---#
+  .[, yield := ymax * (1 - alpha * exp(-beta * w))] %>%
+  expand_grid_df(., farmer_data) %>%
+  .[, e := measurements::conv_unit(w, "inch", "ft") * eta] %>%
+  .[, e_only_cost := e_price * e] %>%
+  .[, w_only_cost := w_price * w] %>%
+  .[, profit := corn_price * yield - e_only_cost - w_only_cost - other_cost] %>%
+  .[, eta_ratio := eta / sum(eta_ls)] %>%
+  .[, marginal_cost_w := w_price + e_price * eta / 12] %>%
+  .[, marginal_prod_w := ymax * alpha * beta * exp(-beta * w)] %>%
+  .[, marginal_profit_w := marginal_prod_w * corn_price - marginal_cost_w] %>%
+  .[, marginal_cost_e := e_price] %>%
+  .[, marginal_prod_e := ymax * alpha * beta * exp(-beta * w) / eta * 12] %>%
+  .[, marginal_profit_e := marginal_prod_e * corn_price - marginal_cost_e]
+```
+
+Find profit-maximizing water (energy) use by farmer under no constraint
+
+```{r}
+opt_we <- prod_data[, .SD[which.max(profit), .(w, e)], by = farmer]
+```
+
+## Quick visualization 
+
+### Profit
+
+```{r}
+ggplot(data = prod_data) +
+  geom_line(aes(y = profit, x = w)) +
+  facet_grid(farmer ~ .)
+```
+
+### Marginal profit
+
+```{r}
+ggplot(data = prod_data) +
+  geom_line(aes(y = marginal_profit_w, x = w)) +
+  facet_grid(farmer ~ .) +
+  geom_hline(yintercept = 0, color = "red")
+```
+
+# Analysis: Quota 
+
+## Water-based
+
+```{r}
+w_quota_res <-
+  prod_data %>%
+  nest_by(farmer) %>%
+  dplyr::mutate(w_quota = list(
+    data.table(data)[which.min(abs(w - w_lim / 2)), ]
+  )) %>%
+  dplyr::select(farmer, w_quota) %>%
+  unnest(cols = w_quota) %>%
+  data.table() %>%
+  .[, instrument_type := "Water-based"]
+```
+
+## Energy-based 
+
+Same energy quota for both farmers, which results in total water use of 20.
+
+```{r}
+e_quota_res <-
+  prod_data %>%
+  nest_by(farmer) %>%
+  dplyr::mutate(e_quota = list(
+    data.table(data)[which.min(abs(w - w_lim * (1 - eta_ratio))), ]
+  )) %>%
+  dplyr::select(farmer, e_quota) %>%
+  unnest(cols = e_quota) %>%
+  data.table() %>%
+  .[, instrument_type := "Energy-based"]
+```
+
+## Combined
+
+```{r}
+quota_res <- 
+  rbind(e_quota_res, w_quota_res) %>%
+  .[, reg_type := "Quota"]
+```
+
+```{r}
+g_quota_res <- 
+ggplot() +
+  #--- profit-water curve ---#
+  geom_line(
+    data = prod_data,
+    aes(y = profit, x = w)
+  ) +
+  #--- water use points ---#
+  # geom_point(
+  #   data = quota_data,
+  #   aes(y = profit, x = w),
+  #   size = 3
+  # ) +
+  facet_grid(instrument_type ~ farmer) +
+  #--- vertical line indicating water use ---#
+  geom_vline(
+    data = quota_res,
+    aes(xintercept = w),
+    color = "red",
+    linetype = "dotted"
+  ) +
+  #--- water use lable ---#
+  geom_text(
+    data = quota_res,
+    aes(y = 205, x = w + 0.8, label = w),
+    color = "red",
+    size = 3
+  ) +
+  #--- horizontal line indicating profit ---#
+  geom_hline(
+    data = quota_res,
+    aes(yintercept = profit),
+    color = "blue",
+    linetype = "dotted"
+  ) +
+  #--- profit lable ---#
+  geom_text(
+    data = quota_res,
+    aes(
+      y = profit + 20,
+      x = 4.5,
+      label = round(profit, digits = 1)
+    ),
+    color = "blue",
+    size = 3
+  ) +
+  scale_x_continuous(breaks = 4:16, limits = c(4, NA)) +
+  xlab("Water Use (inches)") +
+  ylim(100, NA) +
+  ylab("Profit ($/acre)") +
+  theme_bw()
+
+ggsave("Results/figures/g_quota_res.pdf", g_quota_res, height = 4, width = 6.5)
+```
+
+# Analysis: permit trading
+
+## Water permit trading
+
+```{r}
+w_results <-
+  lapply(
+    seq(0, prod_data[, max(marginal_profit_w)], by = 0.1),
+    \(x) {
+      prod_data[, .SD[which.min(abs(marginal_profit_w - x)), ], by = farmer] %>%
+        .[, permit_price := x]
+    }
+  ) %>%
+  rbindlist() %>%
+  .[, tot_w := sum(w), by = permit_price]
+
+permit_price_eq <- w_results[which.min(abs(tot_w - w_lim)), permit_price]
+
+w_res <-
+  w_results[permit_price == permit_price_eq, ] %>%
+  .[, instrument_type := "Water-based"]
+```
+
+## Energy permit trading
+
+```{r}
+e_results <-
+  lapply(
+    seq(0, prod_data[, max(marginal_profit_e)], length = 5000),
+    \(x) {
+      prod_data[marginal_profit_e > 0, .SD[which.min(abs(marginal_profit_e - x)), ], by = farmer] %>%
+        .[, permit_price := x]
+    }
+  ) %>%
+  rbindlist() %>%
+  .[, tot_w := sum(w), by = permit_price]
+
+permit_price_eq <- e_results[which.min(abs(tot_w - w_lim)), permit_price]
+
+e_res <-
+  e_results[permit_price == permit_price_eq, ] %>%
+  .[, instrument_type := "Energy-based"]
+```
+
+## Results visualization
+
+```{r}
+trade_res <- 
+  rbind(w_res, e_res) %>%
+  .[, reg_type := "Permit Trading"]
+
+(
+g_trade_res <- 
+  ggplot() +
+  geom_point(
+    data = trade_res,
+    aes(y = profit, x = w),
+    size = 3
+  ) +
+  geom_line(
+    data = prod_data,
+    aes(
+      x = w,
+      y = profit
+    )
+  ) +
+  #--- vertical line indicating water use ---#
+  geom_vline(
+    data = trade_res,
+    aes(xintercept = w),
+    color = "red",
+    linetype = "dotted"
+  ) +
+  #--- water use lable ---#
+  geom_text(
+    data = trade_res,
+    aes(y = 205, x = w + 1.1, label = w),
+    color = "red",
+    size = 3
+  ) +
+  #--- horizontal line indicating profit ---#
+  geom_hline(
+    data = trade_res,
+    aes(yintercept = profit),
+    color = "blue",
+    linetype = "dotted"
+  ) +
+  #--- profit lable ---#
+  geom_text(
+    data = trade_res,
+    aes(
+      y = profit + 40,
+      x = 4.5,
+      label = round(profit, digits = 1)
+    ),
+    color = "blue",
+    size = 3
+  ) +
+  facet_grid(instrument_type ~ farmer) +
+  xlab("Water Use (inches)") +
+  ylab("profit (bushel/acre)") +
+  theme_bw()
+)
+
+ggsave("Results/figures/g_trade_res.pdf", g_trade_res, height = 4, width = 6.5)
+```
+
+# Save the results
+
+```{r}
+parameters <- 
+  list(
+  corn_price = corn_price, # (bu/acre)
+  w_price = w_price, # water itself is free
+  e_price = e_price, # ($/kwh)
+  other_cost = other_cost, # ($/acre)
+  w_lim = w_lim, # water use target
+  ymax = ymax,
+  alpha = alpha,
+  beta = beta
+  ) 
+
+analysis_results <- 
+  rbind(
+    quota_res, 
+    trade_res, 
+    fill = TRUE
+  )
+```
+
+```{r}
+save(parameters, farmer_data, prod_data, analysis_results, file = "Results/illustration_results.Rdata")
+```
+
+

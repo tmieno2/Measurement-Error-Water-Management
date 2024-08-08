@@ -1,0 +1,756 @@
+---
+title: Welfare analysis of quota and trading system
+format:
+  html:
+    embed-resources: true
+---
+
+# Objectives
+
+This program analyzes the performance of the quota and trading system where quota is determined randomly for a given level of target water use. 
+
++ examine how correlation between optimal water use and measurement error affects the effectiveness of the quota system (though the answer is obvious).
+  + 3 cases: independent, positive, and negative
++ examine how the heterogeneity in production function affects the effectiveness of  **proxy** quota and trading system with measurement errors relative to **water** quota and trading
+  + 3 cases: no, medium, high  heterogeneity
+
+Outcomes to look at:
+
++ profitability
++ water use slack
++ fairness
+
+# Setup
+
+## Theoretical setup
+
+$$
+w_i = \eta_i \cdot p_i
+$$
+
++ $w$: water use 
++ $p$: energy use 
++ $eta$: energy use efficiency (convert energy use to water use)
+
+$$
+\pi = P_c \cdot f(w) - P_w \cdot w 
+$$
+
+$$
+\frac{\partial\pi}{\partial w} = P_c \cdot \frac{\partial f(w)}{\partial w} - P_w 
+$$
+
+$$
+\pi = P_c \cdot f(\eta \cdot p) - P_w \cdot \eta \cdot p
+$$
+
+$$
+\frac{\partial \pi}{\partial p} = P_c \cdot \frac{\partial f(w)}{\partial w}\cdot \frac{\partial w}{\partial p} - P_w \cdot \eta
+= \eta\cdot\frac{\partial\pi}{\partial w}
+$$
+
+What to vary:
+
++ variance of the measurement error 
++ direction of correlation of the measurement error and optimal water use
++ water allocation 
+
++ positive: $\eta := \frac{w^*}{\bar{w^*}}\cdot \varepsilon$
++ negative: $\eta := \frac{\bar{w^*}}{w^*}\cdot \varepsilon$
++ independent: $\eta := \frac{\bar{w^*}}{w^*}\cdot \varepsilon$
+
+## Prices and costs
+```{r}
+corn_price <- 6 # (bu/acre)
+e_price <- 0.15 # ($/kwh)
+w_price <- e_price * 500 / 12 # ($/inch)
+other_cost <- 800 # ($/acre)
+```
+
+## Farmers yield response functions
+
+Production function:
+
+$$
+y = f(w) = ymax (1 - \alpha \cdot e^{-\beta\cdot w})
+$$
+
+$$
+\pi = P_c \cdot f(w) - P_w\cdot w
+$$
+
+$$
+\frac{\partial\pi}{\partial w} = P_c \cdot (ymax\cdot
+\alpha\cdot\beta\cdot e^{-\beta\cdot w}) - P_w
+$$
+
+$$
+w^* = -log(P_w / (P_c \cdot ymax \cdot \alpha \cdot \beta)) / \beta
+$$
+
+### Create three production heterogeneity cases
+
+```{r}
+#--- number of farmers ---#
+num_farmers <- 1000
+```
+
+**Completely homogeneous**
+
+Determine optimal water use ($w^*$), $ymax$, and $\alpha$.
+
+```{r}
+par_set_zero <- list(
+  opt_w = 12,
+  ymax_min = 230,
+  ymax_max = 230,
+  alpha_min = 0.7,
+  alpha_max = 0.7
+)
+```
+
+
+**Medium heterogeneity**
+
+```{r}
+set.seed(328954)
+par_set_med <- list(
+  opt_w = rlnorm(num_farmers, mean = log(11.8525), sdlog = 0.2),
+  ymax_min = 210,
+  ymax_max = 250,
+  alpha_min = 0.7,
+  alpha_max = 0.7
+)
+```
+
+Check the distribution:
+
+```{r}
+mean(par_set_med$opt_w)
+hist(par_set_med$opt_w)
+```
+
+**High heterogeneity**
+
+```{r}
+set.seed(328954)
+par_set_high <- list(
+  opt_w = rlnorm(num_farmers, mean = log(11.266), sdlog = 0.4),
+  ymax_min = 210,
+  ymax_max = 250,
+  alpha_min = 0.6,
+  alpha_max = 0.8
+)
+```
+
+Check the distribution:
+
+```{r}
+mean(par_set_high$opt_w)
+hist(par_set_high$opt_w)
+```
+
+```{r}
+par_set <-
+  data.table(
+    prod_het = c("zero", "medium", "high"),
+    par_set = list(par_set_zero, par_set_med, par_set_high)
+  )
+```
+
+Generate production data where yield, profit, marginal profit of water (and others) are calculated at a sequence of water use levels for each farmer. In the process, the value of $\beta$ is calculated so that the optimal water use is indeed `opt_w`.
+
+```{r}
+#| eval: false
+system_data <-
+  par_set %>%
+  rowwise() %>%
+  dplyr::mutate(farmer_data = list(
+    gen_farmer_data(par_set, num_farmers)
+  )) %>%
+  dplyr::mutate(prod_data = list(
+    #--- generate production data ---#
+    gen_prod_data(farmer_data)
+  ))
+
+saveRDS(system_data, here::here("Results/quota_results_comp_stat.rds"))
+```
+
+
+# Simulation
+
+Set up a parameter space to loop over.
+
++ `target_w`: target water use
++ `u_dev`: maximum deviation from 1 (determines the variance of measurement error)
++ `dir_cor`: direction of the correlation between (unconstrained) optimal water use and measurement error
+
+```{r}
+#| eval: FALSE
+par_data <-
+  data.table::CJ(
+    target_w = seq(7, 13, by = 0.25),
+    u_dev = c(0, 0.1, 0.3, 0.5),
+    dir_cor = c("+", "-", "0")
+  )
+```
+
+When `dir_cor = -` and `u_dev = 0`, measurement error is set so that the ratio of effective water use to proxy (`target_w`) is the same across farmers. For example, when `target_w` is the same as the average optimal water use, effective water use limit allocation maximizes social welfare (same as proxy permit trading). When `dir_cor = 0` and `u_dev = 0`, the quota system is simply a uniform quota system.
+
+For a given value of `target_w`, `u_dev`, and `dir_cor`,
+
++ Create a set of quota (different quota values for different farmers) system for the number of rounds specified by the user using `make_quota_data()`
+  + This function first assigns the effective water use limit and then calculate what the water to proxy conversion rate should have been
++ Conduct quota analysis using `quota_analysis_het()`
+
+## Base case (water use quota)
+
+The quota system with `dir_cor = 0` and `u_dev = 0` is equivalent to water quota (no measurement error).
+
+```{r}
+#| eval: FALSE
+par_sets_w <- par_data[u_dev == 0 & dir_cor == "0", ]
+
+# farmer_data <- system_data$farmer_data[[1]]
+# prod_data <- system_data$prod_data[[1]]
+
+results_w <-
+  system_data %>%
+  dplyr::mutate(results = list(
+    run_analysis(parameter_sets = par_sets_w, farmer_data, prod_data, num_it = 1)
+  )) %>%
+  dplyr::select(prod_het, results) %>%
+  unnest(cols = c(results)) %>%
+  data.table()
+
+saveRDS(results_w, "Results/results_water.rds")
+```
+
+
+## Proxy quota (with measurement errors)
+
+```{r, eval = FALSE}
+#| eval: FALSE
+
+par_sets_p <- par_data[!(u_dev == 0 & dir_cor == "0"), ]
+
+set.seed(7845239)
+
+results_p <-
+  system_data %>%
+  dplyr::mutate(results = list(
+    run_analysis(parameter_sets = par_sets_p, farmer_data, prod_data, num_it = 100, num_cores = 8)
+  )) %>%
+  dplyr::select(prod_het, results) %>%
+  unnest(cols = c(results)) %>%
+  data.table()
+
+saveRDS(results_p, "Results/results_proxy.rds")
+```
+
+
+# Results Presentation
+
+## Summarize the results for presentation.
+
+```{r, eval = FALSE}
+#--- proxy ---#
+results_p <- readRDS("Results/results_proxy.rds")
+
+sum_proxy_res <-
+  results_p %>%
+  .[, .(profit = mean(profit), w = mean(w)), by = .(target_w, instrument_type, dir_cor, u_dev, prod_het)] %>%
+  .[, measure_type := "Proxy"]
+
+saveRDS(sum_proxy_res, here::here("Results/proxy_results_summary.rds"))
+
+#--- water ---#
+results_w <- readRDS(here::here("Results/results_water.rds"))
+
+sum_water_res <-
+  results_w %>%
+  .[, .(profit = mean(profit), w = mean(w)), by = .(target_w, instrument_type, dir_cor, u_dev, prod_het)] %>%
+  .[, measure_type := "Water"]
+
+saveRDS(sum_water_res, here::here("Results/water_results_summary.rds"))
+```
+
+
+```{r}
+sum_res <-
+  rbind(
+    readRDS(here::here("Results/proxy_results_summary.rds")),
+    readRDS(here::here("Results/water_results_summary.rds"))
+  ) %>%
+  .[, dir_cor_txt := paste0("Correlation: ", dir_cor)] %>%
+  .[, dir_cor_txt := factor(dir_cor_txt, levels = paste0("Correlation: ", c("-", "0", "+")))] %>%
+  .[, prod_het := str_to_title(prod_het)] %>%
+  .[, prod_het := factor(prod_het, c("Zero", "Medium", "High"))]
+```
+
+## Profitability: Water vs Proxy Quota (with comparative statistics wrt heterogeneity of farmers)
+
+Figure below compares agricultural profitability as a function of actual water use between water and proxy quota across different production heterogeneity levels. When there is no heterogeneity in farmers' production function, water quota is the most cost effective way to achieve a water use reduction goal (highest profit achievable for a given level of actual water use). Under this circumstance, proxy quota with unbiased measurement errors achieves worse than water quota due to asymmetry in downside and upside risk of water use. (add illustrative figure). 
+
+However, as heterogeneity of farmers increases, comparative advantage of water quota over proxy quota declines. While the performance of both systems declines as the level of heterogeneity increases, water quota is affected more so than proxy quota.
+
+```{r}
+(
+  g_profit_quota_w_vs_p <-
+    sum_res %>%
+    .[instrument_type == "Quota", ] %>%
+    .[(dir_cor == "0" & u_dev == 0.3 & measure_type == "Proxy") | measure_type == "Water", ] %>%
+    ggplot(data = .) +
+    geom_line(aes(y = profit, x = w, color = measure_type)) +
+    facet_grid(. ~ prod_het) +
+    ylab("Target Water Use (inches)") +
+    xlab("Realized Water Use (inches)") +
+    scale_color_discrete(name = "Measurement Type") +
+    theme_bw() +
+    theme(
+      legend.position = "bottom"
+    )
+)
+
+ggsave("Writing/figures/g_profit_quota_w_vs_p.pdf", g_profit_quota_w_vs_p, height = 3.5, width = 6)
+```
+
+
+```{r}
+#| echo: false
+
+system_data <- readRDS(here::here("Results/quota_results_comp_stat.rds"))
+
+farm_data <-
+  data.table(system_data)[prod_het == "medium", farmer_data][[1]] %>%
+  #--- use farmer 1 ---#
+  .[farmer == 1, ] %>%
+  .[, farmer := NULL] %>%
+  expand_grid_df(., data.table(w = seq(0, 15, by = 0.1))) %>%
+  .[, yield := ymax * (1 - alpha * exp(-beta * w))] %>%
+  .[, w_cost := w_price * w] %>%
+  .[, profit := corn_price * yield - w_cost - other_cost] %>%
+  .[, marginal_cost_w := w_price] %>%
+  .[, marginal_prod_w := ymax * alpha * beta * exp(-beta * w)] %>%
+  .[, marginal_profit_w := marginal_prod_w * corn_price - marginal_cost_w]
+
+opt_w <- unique(farm_data$opt_w)
+
+quota_data <-
+  data.table(
+    farmer = c(1, 2, 1, 2),
+    measure_type = c("Water", "Water", "Proxy", "Proxy"),
+    quota = c(7, 7, 4, 10)
+  ) %>%
+  .[, w := quota] %>%
+  .[quota > opt_w, w := opt_w] %>%
+  farm_data[., on = .(w), roll = "nearest"]
+
+pi_dif_2 <- quota_data[farmer == 2 & measure_type == "Proxy", profit] - quota_data[farmer == 2 & measure_type == "Water", profit]
+pi_dif_1 <- quota_data[farmer == 1 & measure_type == "Proxy", profit] - quota_data[farmer == 1 & measure_type == "Water", profit]
+```
+
+The red dotted lines indicate the effective water use quota. Under the water quota system, both farmers receive 7 inches of water quota. Since the unconstrained profit maximizing water use is `r round(opt_w, digits = 2)` inches, both farmers use up all the allocated quota and use 10 inches of water. Under the proxy quota system, they are allocated the same amount of proxy quota. However, measurement error in proxy quota resulted in effective water quota of 4 and 10 inches for farmer A and B, respectively. Both farmers use their allocated amout of water. Under both proxy and water quota systems, the total water use is 14 inches. Farmer B makes `r pi_dif_2` less under the water quota system compared to the proxy quota system. However, Farmer A makes `r -pi_dif_1` more under the water quota system compared to the proxy quota system. This comes from an important nature of crop production with respsect to water: declining marginal impact of water on crop yield. As can be seen in the profit-water relationship, removing an inch of water from 6 inches has much larger negative impact compared to revmoing an inch of water from 10 inches.
+
+```{r}
+#| warning: false
+(
+  g_illustration_homogeneous <-
+    ggplot() +
+    geom_line(
+      data = farm_data,
+      aes(y = profit, x = w)
+    ) +
+    geom_vline(
+      data = quota_data,
+      aes(xintercept = quota),
+      linetype = 2,
+      color = "red"
+    ) +
+    geom_point(
+      data = quota_data,
+      aes(y = profit, x = w),
+      color = "blue",
+      size = 2
+    ) +
+    facet_grid(measure_type ~ farmer) +
+    ylim(0, NA) +
+    xlab("Water Use (inches)") +
+    ylab("Profit ($/acre)") +
+    theme_bw()
+)
+
+ggsave("Writing/figures/g_illustration_homogeneous.pdf", g_illustration_homogeneous, height = 3.5, width = 6)
+```
+
+
+However, when production function becomes heterogeneous, water quota starts to lose its advantage. Uniform quota now acts like heterogeneous quota under homogeneous production function because the same quota is given to farmers with heterogeneous quota. In the example presented in the figure below, farmer A needs less water than farmer B. Water and proxy quota allocated to the farmers are exactly the same as the previous case. In this example, errors in proxy happened to realize so that more effective water quota is given to farmer B than farmer A. Consequently, proxy quota produces a higher total profit than water quota. Of course, if error happened to go the opposite way, then the performance of proxy quota relative to water quota is even worse compared to the homogeneous case. This is a big contrast to the homogeneous case because water quota is always better than proxy quota in that case. Consequently, proxy quota performs relatively better under heterogeneous cases. On average, the positive and negative effects of measurement errors tend to even out. However, proxy quota is never better than water quota **on average** (see Appendix ... for mathematical proof). 
+
+```{r}
+#| echo: false
+#| warning: false
+ 
+farm_data <-
+  data.table(system_data)[prod_het == "medium", farmer_data][[1]] %>%
+  .[, dev_from_7 := abs(opt_w - 7)] %>%
+  .[, dev_from_13 := abs(opt_w - 13)] %>%
+  .[(dev_from_7 == min(dev_from_7) | dev_from_13 == min(dev_from_13)), ] %>%
+  expand_grid_df(., data.table(w = seq(0, 15, by = 0.1))) %>%
+  .[, yield := ymax * (1 - alpha * exp(-beta * w))] %>%
+  .[, w_cost := w_price * w] %>%
+  .[, profit := corn_price * yield - w_cost - other_cost] %>%
+  .[, marginal_cost_w := w_price] %>%
+  .[, marginal_prod_w := ymax * alpha * beta * exp(-beta * w)] %>%
+  .[, marginal_profit_w := marginal_prod_w * corn_price - marginal_cost_w] %>%
+  .[, farmer_txt := "A"] %>%
+  .[opt_w == max(opt_w), farmer_txt := "B"]
+
+opt_w <- farm_data[, .(opt_w = unique(opt_w)), by = farmer_txt]
+
+quota_data_het <-
+  data.table(
+    farmer_txt = c("A", "B", "A", "B"),
+    measure_type = c("Water", "Water", "Proxy", "Proxy"),
+    quota = c(7, 7, 4, 10)
+  ) %>%
+  opt_w[., on = .(farmer_txt)] %>%
+  .[, w := quota] %>%
+  .[quota > opt_w, w := opt_w] %>%
+  setnames("farmer_txt", "farmer_id") %>%
+  nest_by(farmer_id) %>%
+  dplyr::mutate(merged = list(
+    farm_data[farmer_txt == farmer_id, ][data.table(data), on = .(w), roll = "nearest"]  
+  )) %>%
+  dplyr::select(farmer_id, merged) %>%
+  unnest(cols = c(merged)) %>%
+  data.table() %>%
+  .[, .(farmer, farmer_txt, w, opt_w, profit, measure_type, quota)]
+  
+```
+
+
+```{r}
+#| warning: false
+(
+  g_illustration_het <-
+    ggplot() +
+    geom_line(
+      data = farm_data,
+      aes(y = profit, x = w)
+    ) +
+    geom_vline(
+      data = quota_data_het,
+      aes(xintercept = quota),
+      linetype = 2,
+      color = "red"
+    ) +
+    geom_point(
+      data = quota_data_het,
+      aes(y = profit, x = w),
+      color = "blue",
+      size = 2
+    ) +
+    facet_grid(measure_type ~ farmer_txt) +
+    ylim(0, NA) +
+    xlab("Water Use (inches)") +
+    ylab("Profit ($/acre)") +
+    theme_bw()
+)
+
+ggsave("Writing/figures/g_illustration_het.pdf", g_illustration_het, height = 3.5, width = 6)
+```
+
+
+When measurement error is independent and production function is concave, water quota always outperforms proxy quota (show proof in appendix). 
+
+
+
+## Water Use Slack:
+
+### <span style = "color: red;"> What is the problem with water use slack? </span>
+
++ When <span style = "color: blue;"> unbiased (in estimating water use) </span> proxy is used, policy makers may unintentionally make the quota too stringent.  
++ Being aware of this problem, policy makers need to set a quota that is higher than the target water use. But, it is hard to know how much higher.
+
+```{r}
+(
+  g_slack_quota_w_vs_p <-
+    sum_res %>%
+    .[instrument_type == "Quota", ] %>%
+    .[(dir_cor == "0" & u_dev == 0.3 & measure_type == "Proxy") | measure_type == "Water", ] %>%
+    ggplot(data = .) +
+    geom_line(aes(y = w, x = target_w, color = measure_type)) +
+    facet_grid(. ~ prod_het) +
+    geom_abline(slope = 1, color = "black") +
+    xlab("Realized Water Use (inches)") +
+    ylab("Profit from Agricultural Production ($/acre)") +
+    coord_equal()
+)
+```
+
+Water use slack always exists when a uniform water quota is used and farmers are heterogeneous in production function. 
+
+The figure below shows water use under a range of water use limit values (x-axis) under different circumstances characterized by two parameters: 
+
+1. correlation between measurement error and unconstrained optimal water use and 
+2. standard deviation of measurement error
+
+The blue solid lines represent the water use without any measurement error. The red solid lines represent the water use with measurement error. The black solid lines represent 1 to 1 line. The vertical distance from the black line is the "slack" in water use: how much less water is used relative to the water use limit.
+
+As the standard deviation of measurement error increases, water use slack becomes larger. 
++ When the correlation between measurement error and unconstrained water use is positive, water use slack with measurement error can be smaller compared to the case without measurement error. 
++ Positive correlation between them can happen in the case where energy use is used as a proxy for water use. This means that more (effective) water is allocated to those who use more water.
+
+**Note:** For the $SD = 0$ and $Correlation = +$ case, it is programmed so that quota perfectly matches with unconstrained optimal water use.
+
+## The effect of increasing the size of measurement error
+
+```{r}
+q_udev <- sum_res[(dir_cor == "0" & measure_type == "Proxy"), ]
+w_udev <-
+  sum_res[measure_type == "Water", ] %>%
+  .[, u_dev := NULL] %>%
+  expand_grid_df(., data.table(u_dev = c(0.1, 0.3, 0.5)))
+
+quota_plot_data_comp_stat <-
+  rbind(q_udev, w_udev) %>%
+  .[instrument_type == "Quota", ]
+```
+
+Profit loss increases as the degree of measurement error increases.
+
+```{r}
+(
+  g_profit_quota_comp_stat <-
+    ggplot(data = quota_plot_data_comp_stat) +
+    geom_line(aes(y = profit, x = w, color = measure_type)) +
+    facet_grid(u_dev ~ prod_het) +
+    ylab("Profit ($/acre)") +
+    xlab("Realized Water Use (inches)")
+)
+```
+
+```{r}
+(
+  g_slack_quota_comp_stat <-
+    ggplot(data = quota_plot_data_comp_stat) +
+    geom_line(aes(y = w, x = target_w, color = measure_type)) +
+    geom_abline(slope = 1, color = "black") +
+    facet_grid(u_dev ~ prod_het) +
+    ylab("Target Water Use (inches)") +
+    xlab("Realized Water Use (inches)")
+)
+```
+
+
+## The effect of allowing trading quota
+
+```{r}
+#| echo: false
+q_temp <- sum_res[(dir_cor == "0" & u_dev != 0 & measure_type == "Proxy"), ]
+w_temp <-
+  sum_res[measure_type == "Water", ] %>%
+  .[, u_dev := NULL] %>%
+  expand_grid_df(., data.table(u_dev = c(0.1, 0.3, 0.5)))
+
+trading_plot_data <-
+  rbind(w_temp, q_temp) %>%
+  .[, type := paste0(measure_type, "-", instrument_type)]
+```   
+
+
+### Trading reduces welfare loss associated with the use of proxy
+
++ Using proxy under the quota system instead of water can hurt welfare severely
++ The disadvantage of using proxy almost disappears when trading of quota is allowed
++ Proxy trading will never be as profitable as water trading (provide mathematical proof), but the economic loss seems to be very small
+
+```{r}
+#| echo: false
+
+(
+  g_trade_effect_profit <-
+    ggplot(data = trading_plot_data) +
+    geom_line(aes(y = profit, x = w, color = type)) +
+    facet_grid(u_dev ~ prod_het) +
+    scale_color_brewer(palette = "Set1") +
+    ylab("Profit ($/acre)") +
+    xlab("Realized Water Use (inches)") +
+    scale_color_discrete(name = "Measurement Type") +
+    theme_bw() +
+    theme(legend.position = "bottom")
+)
+
+ggsave("Writing/figures/g_trade_effect_profit.pdf", g_trade_effect_profit, height = 3.5, width = 6)
+```
+
+
+### Trading reduces uncertainty in water use slack
+
+As long as proxy is an unbiased estimation of water use, trading of quota eliminates uncertainty in water use slack for policy makers. 
+
+```{r}
+#| echo: false
+
+(
+  g_trade_effect_slack <-
+    ggplot(data = trading_plot_data) +
+    geom_line(aes(y = w, x = target_w, color = type)) +
+    facet_grid(u_dev ~ prod_het) +
+    scale_color_brewer(palette = "Set1") +
+    xlab("Target Water Use (inches)") +
+    ylab("Realized Water Use (inches)")
+)
+```
+
+Introducing trading to a water quota system can increases water use substantially if total quota stays the same (URNRD).
+
+## Profit Distribution  
+
+Figure below presents the ratio of profit under quota-based relative to water-based system for quota (red) and permit trading (blue). Ratio of less than 1 indicates making less profit under the quota-based system compared to the water-based system. 
+
+
+```{r}
+#| eval: false
+
+#! Nearest matching based on water use (not target water use).
+
+sum_proxy_res <- readRDS(here::here("Results/proxy_results_summary.rds"))
+sum_water_res <- readRDS(here::here("Results/water_results_summary.rds"))
+
+sum_water_res_quota <- 
+  sum_water_res[instrument_type == "Quota", ] %>%
+  setnames("target_w", "target_w_water") %>%
+  .[, .(target_w_water, w)]
+
+sum_proxy_res_quota <- 
+  sum_proxy_res[instrument_type == "Quota", ] %>%
+  setnames("target_w", "target_w_proxy") %>%
+  .[, .(target_w_proxy, w, dir_cor, u_dev, prod_het)]
+
+quota_match <-
+  sum_water_res_quota[sum_proxy_res_quota, on = .(w), roll = "nearest"] %>%
+  unique(by = c("target_w_proxy", "dir_cor", "u_dev", "prod_het"))
+```
+
+### Quota 
+
+```{r}
+#| eval: false
+
+results_p_slim <- 
+  results_p[instrument_type == "Quota", .(target_w, profit, dir_cor, u_dev, prod_het, farmer, case)] %>%
+  setnames("target_w", "target_w_proxy") %>%
+  setnames("profit", "profit_proxy") %>%
+  quota_match[., on = .(target_w_proxy, dir_cor, u_dev, prod_het)]
+
+results_w_slim <- 
+  results_w[instrument_type == "Quota", .(target_w, profit, prod_het, farmer)] %>%
+  setnames("target_w", "target_w_water") %>%
+  setnames("profit", "profit_water")
+
+prob_ls <- seq(0.01, 0.99, by = 0.01)
+
+profit_ratio_quota <- 
+  results_w_slim[results_p_slim, on = .(target_w_water, prod_het, farmer)] %>%
+  .[, ratio := profit_proxy / profit_water] %>%
+  .[, .(ratio = quantile(ratio, prob = prob_ls)), by = .(w, dir_cor, u_dev, prod_het)] %>%
+  .[, prob := rep(prob_ls, .N / length(prob_ls))]
+
+saveRDS(profit_ratio_quota, here::here("Results/profit_ratio_quota.rds"))
+```
+
+
+### Trading
+
+```{r}
+#| eval: false
+ 
+results_p_slim <- 
+  results_p[instrument_type == "Trading", .(target_w, profit, dir_cor, u_dev, prod_het, farmer, case)] %>%
+  setnames("profit", "profit_proxy")
+
+results_w_slim <- 
+  results_w[instrument_type == "Trading", .(target_w, profit, prod_het, farmer)] %>%
+  setnames("profit", "profit_water")
+
+profit_ratio_trading <- 
+  results_w_slim[results_p_slim, on = .(target_w, prod_het, farmer)] %>%
+  .[, ratio := profit_proxy / profit_water] %>%
+  .[, .(ratio = quantile(ratio, prob = prob_ls)), by = .(target_w, dir_cor, u_dev, prod_het)] %>%
+  .[, prob := rep(prob_ls, .N / length(prob_ls))]
+
+saveRDS(profit_ratio_trading, here::here("Results/profit_ratio_trading.rds"))
+```
+
+### Visualization
+
+```{r}
+#| eval: false
+ 
+profit_ratio_trading <- 
+  readRDS(here::here("Results/profit_ratio_trading.rds")) %>%
+  .[dir_cor == "0" & target_w == 8 & ratio > 0 & ratio < 3, ] %>%
+  .[, .(u_dev, prod_het, ratio, prob)] %>%
+  .[, instrument_type := "Trading"]
+
+profit_ratio_quota <- 
+  readRDS(here::here("Results/profit_ratio_quota.rds")) %>%
+  .[dir_cor == "0" & ratio > 0 & ratio < 3, ] %>%
+  .[, dev_w := abs(w-8), by = .(prod_het, u_dev)] %>%
+  .[, .SD[dev_w == min(dev_w)], by = .(prod_het, u_dev)] %>%
+  .[, .(u_dev, prod_het, ratio, prob)] %>%
+  .[, instrument_type := "Quota"]
+
+profit_ratio <- 
+  rbind(profit_ratio_trading, profit_ratio_quota) %>%
+  .[, prod_het := str_to_title(prod_het)] %>%
+  .[, prod_het := factor(prod_het, c("Zero", "Medium", "High"))]
+
+saveRDS(profit_ratio, here::here("Results/profit_ratio.rds"))
+```
+
+
+```{r}
+profit_ratio <- readRDS(here::here("Results/profit_ratio.rds"))
+
+g_profit_ratio <-
+  ggplot(profit_ratio) +
+  geom_line(aes(x = ratio, y = prob, color = instrument_type)) +
+  facet_grid(prod_het ~ u_dev) +
+  xlab("Ratio of Profit under Proxy-based to Water-based systems") +
+  ylab("Cumulative Probability") +
+  scale_color_discrete(name = "Insturment Type") +
+  theme_bw() +
+  theme(legend.position = "bottom")
+
+ggsave("Writing/figures/g_profit_ratio.pdf", g_profit_ratio, height = 3.5, width = 6)
+```
+
+
+# Appendix
+
+## The impact of correlation between measurement error and water use
+
+Two dimensions of measurement error:
+
++ cross-sectional (this is what we have focused on so far)
++ temporal (due to weather)
+  + implications on dynamically adjusting proxy quota (underestimation of proper quota). 
+
+
+### Temporal Correlation
+
+The use of proxy quota system, irrespective or whether water or its proxy is used, water use is less than the quota. The degree of water use slack is not known to 
+
+Given, they do not observe water use and the decision variable for water manager is quota, 
+
+$$
+A_i = f(\bar{W_i})
+$$
+
+
+
+In aquifer management, it is not necessary to observe water use.   
+
+

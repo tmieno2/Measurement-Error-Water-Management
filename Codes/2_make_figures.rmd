@@ -1,0 +1,58 @@
+# Observed measurement errors 
+
+## Data Preparation
+
+```{r}
+#--- NE data ---#
+ne_data <-
+  readRDS(here::here("Data/water_energy_MW.rds")) %>%
+  .[nrdname != "Twin Platte", ] %>%
+  .[, me := water_est - volaf] %>%
+  .[, w_to_e := kwh / volaf] %>% # (kwh/feet)
+  .[, region := paste0(nrdname, " (Nebraska)")]
+
+#--- CO data ---#
+# Colorado data provided by Aaron Hrozencik. Pumping tests to measure kwh/acre-feet (not throughout the season like NE data).
+co_data <-
+  fread(here::here("Data/CO_price_data.csv")) %>%
+  setnames(c("PCC", "pumpingAF"), c("w_to_e", "volaf")) %>%
+  setnames(names(.), tolower(names(.))) %>%
+  .[, .(wdid, year, w_to_e, volaf)] %>%
+  .[, region := "Eastern Colorado"]
+
+data <- rbind(ne_data, co_data, fill = TRUE)
+```
+
+## Distribution of energy use efficiency
+
+```{r}
+g_hist_eta <-
+  ggplot(data = data[w_to_e < 1000 & w_to_e > 100, ]) +
+  geom_histogram(aes(x = w_to_e), fill = NA, color = "blue", bins = 100) +
+  facet_grid(region ~ .) +
+  xlab("Energy use efficiency (kwh/acre-feet)") +
+  ylab("Count") +
+  theme_bw() +
+  theme(legend.position = "bottom")
+
+ggsave("Results/figures/g_hist_eta.pdf", g_hist_eta, height = 4, width = 6.5)
+```
+
+## Measurement error in water use estimates
+
+```{r, fig.dim = c(6.5, 5)}
+g_me <-
+  ggplot(data = data[water_est < 400, ]) +
+  geom_point(aes(y = volaf, x = water_est), size = 0.1) +
+  facet_grid(. ~ nrdname) +
+  geom_abline(intercept = 0, slope = 1) +
+  xlab("Water Use Estimates Based on Energy Use (acre-feet)") +
+  ylab("Observed Water Use (acre-feet)") +
+  theme_bw() +
+  theme(legend.position = "bottom") +
+  coord_equal() +
+  scale_x_continuous(breaks = (1:9) * 100) +
+  scale_y_continuous(breaks = (1:9) * 100)
+
+ggsave("Results/figures/g_me.pdf", g_me, height = 4, width = 6.5)
+```

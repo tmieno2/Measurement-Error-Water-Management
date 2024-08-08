@@ -1,0 +1,403 @@
+--- 
+title: "Regulating water by energy: welfare implications of energy use efficiency heterogeneity"
+author: ""
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    number_sections: yes
+    theme: flatly
+    toc_float: yes
+    toc: yes
+    toc_depth: 3
+---
+
+```{r }
+#--- production function by year ---#
+prod_store <- readRDS("Results/prod_fcn.rds")
+```
+
+```{r }
+# ===================================
+# Data preparation
+# ===================================
+data <-
+  readRDS("Data/water_energy_MW.rds") %>%
+  #--- focus only on URNRD ---#
+  .[nrdname == "Upper Republican", ] %>%
+  #--- energy use efficiency (amount of energy needed to apply an acre-inch of water) ---#
+  .[, e_ef := kwh / (volaf * 12)] %>%
+  #--- average energy use efficiency ---#
+  .[, median_e_ef := median(e_ef, na.rm = TRUE)] %>%
+  #--- (unbiased) estimated water use ---#
+  .[, water_est := kwh / median_e_ef / 12] %>%
+  #--- loser and winner ---#
+  .[, type := ifelse(water_est > volaf, "Loser", "Winner")]
+```
+# Theory
+
+Suppose the profit function is quadratic locally (within the range that is relevant) as follows 
+$$
+\begin{aligned}
+\pi=\beta_0+\beta_1 \cdot w-\beta_2\cdot w^2
+\end{aligned}
+$$
+where $\beta_0>0$, $\beta_1>0$ and $\beta_2>0$. Profit is a quadratic function of water, and the marginal profit of water is linear. Further, suppose the water use limit is $\bar{w}$. Let $e$ denote the water use limit error induced by the heterogeneity of energy use efficiency. The distribution of the error is represented by $f(e)$, which satisfies $E[e]=0$ (average error is zero). Finally, suppose $\bar{w}+e<w^*$ where $w^*$ is the optimal water use if it were not for the de facto water use limits (all the producers are constrained). 
+
+Then, the profit under the energy use limit scheme is as follows:
+$$
+\begin{aligned}
+E[\pi] & = \int_{-a}^a \Big[ \beta_0+\beta_1 \cdot (w+e)-\beta_2\cdot (w+e)^2 \Big] f(e) de \\
+	& = \phi\int_{-a}^a \Big[ (\beta_0+\beta_1 \cdot w-\beta_2\cdot w^2) + (\beta_1 -2\beta_2 \cdot w)\cdot e-\beta_2\cdot e^2 \Big] f(e) de \\
+	& = (\beta_0+\beta_1 \cdot w-\beta_2\cdot w^2)+(\beta_1 -2\beta_2 \cdot w)\cdot E[e] -\beta_2\cdot Var(e) \\
+	& = (\beta_0+\beta_1 \cdot w-\beta_2\cdot w^2)-\beta_2\cdot Var(e) 
+\end{aligned}
+$$
+Since the expected profit under the water use limit is $(\beta_0+\beta_1 \cdot w-\beta_2\cdot w^2)$, the expected economic loss is $\beta_2\cdot Var(e)$, which is linear in the variance of the error.  
+
+<!-- ## General case: Jensen's inequality
+$$
+\begin{aligned}
+E[\pi] & = \int_{-a}^a g(e) f(e) de \\
+	& = \phi\int_{-a}^a \Big[ \bar{w}^2+2\cdot\bar{w}\cdot e + \cdot e^2 \Big] f(e) de \\
+	& = \phi\bar{w}^2+2\phi\cdot\bar{w}\cdot E[e] + \phi V(e) \\
+	& = \phi\bar{w}^2+\phi V(e)
+\end{aligned}
+$$ -->
+
+# Water Use Estimation Method
+
+1. find the energy use efficiency (the amount of energy needed to apply an acre-inch of water) by dividing energy use (kwh) by water use (acre-feet) for each well
+2. calculate the median energy use efficiency, which provides the unbiased energy use efficiency (unbiased in the sense that losers and winners are 50-50)
+3. multiply energy use by the average energy use efficiency to obtain water use estimate
+
+# Basic data visualization
+
+## Degrees of Error by Year
+```{r, fig.width=10,fig.height=10,out.height='1000px',out.width='1000px'}
+ggplot(data = data) +
+  geom_point(aes(x = volaf, y = water_est, color = type), size = 0.1) +
+  facet_wrap(year ~ ., strip.position = "top") +
+  geom_abline(intercept = 0, slope = 1) +
+  ylab("Water Use Estimates Based on Energy Use (acre-feet)") +
+  xlab("Observed Water Use (acre-feet)") +
+  theme(
+    legend.position = "bottom"
+  )
+```
+
+# Welfare loss analysis: set up
+
+## Production functions
+
+There are 35 years of production function estimated for URNRD using AquaCrop available. Unfortunately, I do not know which year each AquaCrop production year corresponds to. So, for now, I apply the energy use efficiency numbers observed in 2013 for the wet and medium years and 2012 for dry years. Here are the production functions I will use.
+
+### wet year
+```{r }
+temp_prod <- prod_store[[paste(12)]]
+data.table(ir = seq(
+  floor(min(temp_prod$model$ir) * 100) / 100,
+  floor(max(temp_prod$model$ir) * 100) / 100,
+  by = 0.05
+)) %>%
+  .[, y_hat := predict(temp_prod, newdata = .)] %>%
+  ggplot(data = .) +
+  geom_line(aes(y = y_hat, x = ir)) +
+  ylab("Yield (bu/acre)") +
+  xlab("Water Use (inches/acre)")
+```
+
+
+### medium year
+```{r }
+temp_prod <- prod_store[[paste(8)]]
+data.table(ir = seq(
+  floor(min(temp_prod$model$ir) * 100) / 100,
+  floor(max(temp_prod$model$ir) * 100) / 100,
+  by = 0.05
+)) %>%
+  .[, y_hat := predict(temp_prod, newdata = .)] %>%
+  ggplot(data = .) +
+  geom_line(aes(y = y_hat, x = ir)) +
+  ylab("Yield (bu/acre)") +
+  xlab("Water Use (inches/acre)")
+```
+
+
+### dry year
+```{r }
+temp_prod <- prod_store[[paste(19)]]
+data.table(ir = seq(
+  floor(min(temp_prod$model$ir) * 100) / 100,
+  floor(max(temp_prod$model$ir) * 100) / 100,
+  by = 0.05
+)) %>%
+  .[, y_hat := predict(temp_prod, newdata = .)] %>%
+  ggplot(data = .) +
+  geom_line(aes(y = y_hat, x = ir)) +
+  ylab("Yield (bu/acre)") +
+  xlab("Water Use (inches/acre)")
+```
+
+## Water and energy use limits scheme
+
+Energy use per acre that achieves 13 inches/acre limit is `r round(data[,unique(median_e_ef)*13],digits=2)` kwh.
+
+```{r }
+w_lim <- 13
+data[, e_lim := median_e_ef * 13] %>%
+  #--- water use limit ---#
+  .[, w_max := e_lim / e_ef]
+```
+
+De facto water use limit distribution is presented below:
+
+```{r }
+ggplot(data = data[year == 2013, ]) +
+  geom_histogram(aes(x = w_max, fill = type), alpha = 0.8, color = "black") +
+  xlab("De facto water use limit (inches/acre)") +
+  scale_fill_discrete(name = "")
+```
+
+## Other parameters
+
++ corn price: $3.5/bu
++ energy cost: $0.1/kwh
+
+```{r }
+p_corn <- 3.5
+p_e <- 0.1
+```
+
+# Welfare loss comparison: results
+
+```{r}
+prod_year_len <- length(prod_store)
+
+sim_results <-
+  data.table(prod_year = seq_len(prod_year_len)) %>%
+  rowwise() %>%
+  dplyr::mutate(sim_data = list(
+    sim_ir_welfare(data, prod_year)
+  )) %>%
+  dplyr::mutate(g_ir_uc = list(
+    ggplot(data = sim_data) +
+      geom_histogram(aes(x = ir_u), fill = "blue", color = "black", alpha = 0.5) +
+      xlab("Optimal Water Use (unconstrained)") +
+      ylab("")
+  )) %>%
+  dplyr::mutate(g_welfare_loss = list(
+    sim_data %>%
+      .[, .(pi_loss_elim, pi_loss_wlim)] %>%
+      .[, id := 1:.N] %>%
+      melt(id.vars = "id") %>%
+      .[, type := ifelse(variable == "pi_loss_wlim", "Water Use Limits", "Energy Use Limits")] %>%
+      ggplot(data = .) +
+      geom_histogram(aes(value)) +
+      facet_grid(type ~ .) +
+      xlab("Economic Loss Relative to the Unconstrained Case ($/acre)")
+  ))
+```
+
+
+```{r}
+sim_ir_welfare <- function(data, prod_year, w_seq_len = 1000) {
+  #++++++++++++++++++++++++++++++++++++
+  #+ Debug
+  #++++++++++++++++++++++++++++++++++++
+  # prod_year <- 19
+
+  #++++++++++++++++++++++++++++++++++++
+  #+ Main
+  #++++++++++++++++++++++++++++++++++++
+  #--- extract production function ---#
+  temp_prod <- prod_store[[paste(prod_year)]]
+
+  #--- number of wells ---#
+  well_len <- data[year == 2013, wellid] %>% length()
+
+  opt_ir_uc <-
+    data[year == 2013, ] %>%
+    .[, .(wellid, e_ef, w_max)] %>%
+    .[rep(1:nrow(.), each = w_len), ] %>%
+    .[, ir := rep(seq(min(temp_prod$model$ir), max(temp_prod$model$ir), length = w_seq_len), well_len)] %>%
+    .[, e_use := ir * e_ef] %>%
+    .[, y_hat := predict(temp_prod, newdata = .)] %>%
+    .[, pi_hat := p_corn * y_hat - p_e * e_use] %>%
+    .[, .SD[which.max(pi_hat), ], by = wellid] %>%
+    #--- unconstrained optimal water use ---#
+    .[, ir_u := ir] %>%
+    #--------------------------
+    # Energy use limit
+    #--------------------------
+    #--- constrained water use ---#
+    .[, ir := pmin(ir_u, w_max)] %>%
+    .[, y_hat_elim := predict(temp_prod, newdata = .)] %>%
+    setnames("ir", "ir_elim") %>%
+    #--- constrained profit ---#
+    .[, e_use_elim := ir_elim * e_ef] %>%
+    .[, pi_hat_elim := p_corn * y_hat_elim - p_e * e_use_elim] %>%
+    .[, pi_loss_elim := pi_hat - pi_hat_elim] %>%
+    #--------------------------
+    # Water use limit
+    #--------------------------
+    #--- constrained water use ---#
+    .[, ir := pmin(ir_u, w_lim)] %>%
+    .[, y_hat_wlim := predict(temp_prod, newdata = .)] %>%
+    setnames("ir", "ir_wlim") %>%
+    #--- constrained profit ---#
+    .[, e_use_wlim := ir_wlim * e_ef] %>%
+    .[, pi_hat_wlim := p_corn * y_hat_wlim - p_e * e_use_wlim] %>%
+    .[, pi_loss_wlim := pi_hat - pi_hat_wlim]
+}
+```
+
+## wet year
+
+```{r}
+prod_year <- 12
+```
+
+Here is the distribution of unconstrained optimal water use:
+
+```{r }
+sim_results$g_ir_uc[[prod_year]]
+```
+
+Profit loss (compared to the unconstrained profit) distribution:
+
+```{r }
+sim_results$g_welfare_loss[[prod_year]]
+```
+
+No wells are constrained in both energy and water use limits scheme. But, it is possible in a little bit more dry year that some wells are constrained under the energy use limit scheme while no wells are constrained under the water use limit scheme.
+
+## Medium year
+
+```{r}
+prod_year <- 8
+```
+
+Profit loss (compared to the unconstrained profit) distribution:
+
+
+```{r }
+sim_results$g_welfare_loss[[prod_year]]
+```
+
+Now, you see the difference. Energy use limits are more damaging. 
+
+## Dry year
+
+```{r}
+prod_year <- 19
+```
+
+Profit loss (compared to the unconstrained profit) distribution:
+
+```{r }
+sim_results$g_welfare_loss[[prod_year]]
+```
+
+As we expected, under the energy use limit scheme, some benefited significantly, but others suffered quite a bit more compared to the water use limit scheme. The average economic loss under the energy and water use limits scheme are `r round(opt_ir_uc[,mean(pi_loss_elim)],digits=2)` and `r round(opt_ir_uc[,mean(pi_loss_wlim)],digits=2)`, respectively. 
+
+
+```{r }
+sim_data <- sim_results$sim_data[[prod_year]]
+sim_data %>%
+  .[, .(ir_elim, ir_wlim)] %>%
+  .[, id := 1:.N] %>%
+  melt(id.vars = "id") %>%
+  .[, type := ifelse(variable == "ir_wlim", "Water Use Limits", "Energy Use Limits")] %>%
+  ggplot(data = .) +
+  geom_histogram(aes(value)) +
+  facet_wrap(type ~ .) +
+  xlab("Water Use (inches)")
+```
+
+The average water use under the energy and water use limits scheme are `r round(sim_data[,mean(ir_elim)],digits=2)` and `r round(sim_data[,mean(ir_wlim)],digits=2)`, respectively. As you can see, the average water use is higher under the energy limit scheme than the water limit scheme. This is because producers are more energy use efficient in dry years. Remember that the average energy use efficiency was calculated using all the years of data. Consequently, there are more winners than losers in 2012, which makes the energy use limit loser than the water use limit, which helped farmer in profitability, but increased water use.   
+
+
+## Dry year II (50-50)
+
+Now, I will use energy use efficiency so that the average water use under the energy limit scheme is the same as 13 inches (try and error).
+
+```{r dry_II_calck}
+#--- prod fcn ---#
+temp_prod <- prod_store[[paste(19)]]
+
+#--- unconstrained optimal water use ---#
+w_len <- 1000
+opt_ir_uc <- data[year == 2012, ] %>%
+  .[, e_lim_2012 := w_lim * 47.5] %>%
+  .[, w_max := e_lim_2012 / e_ef] %>%
+  .[, .(wellid, e_ef, w_max)] %>%
+  .[rep(1:nrow(.), each = w_len), ] %>%
+  .[, ir := seq(min(temp_prod$model$ir), max(temp_prod$model$ir), length = w_len)] %>%
+  .[, e_use := ir * e_ef] %>%
+  .[, y_hat := predict(temp_prod, newdata = .)] %>%
+  .[, pi_hat := p_corn * y_hat - p_e * e_use] %>%
+  .[, .SD[which.max(pi_hat), ], by = wellid] %>%
+  #--- unconstrained optimal water use ---#
+  .[, ir_u := ir] %>%
+  #--------------------------
+  # Energy use limit
+  #--------------------------
+  #--- constrained water use ---#
+  .[, ir := pmin(ir_u, w_max)] %>%
+  .[, y_hat_elim := predict(temp_prod, newdata = .)] %>%
+  setnames("ir", "ir_elim") %>%
+  #--- constrained profit ---#
+  .[, e_use_elim := ir_elim * e_ef] %>%
+  .[, pi_hat_elim := p_corn * y_hat_elim - p_e * e_use_elim] %>%
+  .[, pi_loss_elim := pi_hat - pi_hat_elim] %>%
+  #--------------------------
+  # Water use limit
+  #--------------------------
+  #--- constrained water use ---#
+  .[, ir := pmin(ir_u, w_lim)] %>%
+  .[, y_hat_wlim := predict(temp_prod, newdata = .)] %>%
+  setnames("ir", "ir_wlim") %>%
+  #--- constrained profit ---#
+  .[, e_use_wlim := ir_wlim * e_ef] %>%
+  .[, pi_hat_wlim := p_corn * y_hat_wlim - p_e * e_use_wlim] %>%
+  .[, pi_loss_wlim := pi_hat - pi_hat_wlim]
+```
+
+Here is the distribution of unconstrained optimal water use:
+
+```{r dry_II_ir_u}
+ggplot(data = opt_ir_uc) +
+  geom_histogram(aes(x = ir_u), fill = "blue", color = "black", alpha = 0.5) +
+  xlab("Optimal Water Use (unconstrained)") +
+  ylab("")
+```
+
+Profit loss (compared to the unconstrained profit) distribution:
+
+```{r dry_II_pi_loss}
+opt_ir_uc %>%
+  .[, .(pi_loss_elim, pi_loss_wlim)] %>%
+  melt() %>%
+  .[, type := ifelse(variable == "pi_loss_wlim", "Water Use Limits", "Energy Use Limits")] %>%
+  ggplot(data = .) +
+  geom_histogram(aes(value)) +
+  facet_wrap(type ~ .) +
+  xlab("Economic Loss Relative to the Unconstrained Case ($/acre)")
+```
+
+The average economic loss under the energy and water use limits scheme are `r round(opt_ir_uc[,mean(pi_loss_elim)],digits=2)` and `r round(opt_ir_uc[,mean(pi_loss_wlim)],digits=2)`, respectively. Note that the dry-year production function I used is very much linear around 13 inches. So, the energy use limit is not hurting much. But, the more concave the production function, the greater the economic loss of the use of energy use limit schemes.
+
+```{r dry_II_ir_we}
+opt_ir_uc %>%
+  .[, .(ir_elim, ir_wlim)] %>%
+  melt() %>%
+  .[, type := ifelse(variable == "ir_wlim", "Water Use Limits", "Energy Use Limits")] %>%
+  ggplot(data = .) +
+  geom_histogram(aes(value)) +
+  facet_wrap(type ~ .) +
+  xlab("Water Use (inches)")
+```
+
+The average water use under the energy and water use limits scheme are `r round(opt_ir_uc[,mean(ir_elim)],digits=2)` and `r round(opt_ir_uc[,mean(ir_wlim)],digits=2)`, respectively. As you can see, the average water use is almost the same.   
+
+

@@ -1,0 +1,196 @@
+# Proof 1:
+
+Suppose measurement error is unbiased and independent. Further assume that the expected value of the sum of allocated proxy quota is the same as that of water quota, then expected value of total profit and water use are always higher under the uniform water quota.
+
++ variability in quota is not good in general due to asymmetric risk (going low hurts more than going high)
+
+## Production function:
+
+**Definitions:**
+
+$$
+y_i = f_i(w)
+$$
+
++ $y$: crop yield
++ $f(\cdot)$: production function
++ $w$: water
+
+**Conditions:**
+
+$$
+\frac{\partial f_i}{\partial w} \geq 0 \;\; ^{\forall} i = 1, \dots, N
+$$
+
+$$
+\frac{\partial^2 f_i}{\partial w^2} \leq 0 \;\; ^{\forall} i = 1, \dots, N
+$$
+
+## Profit function
+
+$$
+\pi_i = P_c \cdot f_i(w) - P_w \cdot w
+$$
+
+$$
+\frac{\partial \pi_i}{\partial w} \geq 0 \;\; ^{\forall} i = 1, \dots, N
+$$
+
+$$
+\frac{\partial^2 \pi_i}{\partial w^2} \leq 0 \;\; ^{\forall} i = 1, \dots, N
+$$
+
+## Measurement error:
+
+**Definitions**
+
+$$
+p_i = w_i + \mu_i 
+$$
+
++ $p_i$: proxy 
++ $w_i$: water 
++ $\mu_i$: measurement error 
+
+**Conditions**
+
++ Proxy is unbiased.
+
+$E[\mu_i] = 0$
+
++ Measurement error is uncorrelated with $w_i$.
+
+$Cov(w_i, \mu_i) = 0$
+
++ Variance is finite.
+
+$V(\mu_i) < \infty$
+
+# Theorem 1
+
+## Theorem
+
+Suppose target average water use is $\alpha >0$. Under the uniform water quota, $\alpha$ is allocated to all the individual farmers. Under the proxy quota, proxy is allocated such that $\sum_{i=1}^N E[p_i] = \sum_{i=1}^N E[w_i] = \alpha$.  Then, 
+
++ (1) average water use will be always less than equal to $\alpha$ for both quota systems on average
++ (2) average water use under proxy quota is lower than under water quota on average
++ (3) average profit under proxy quota is lower than under water quota on average 
+
+**Point 1**
+
+Let $w^*_i$ denote the amount of water farmer $i$ would have used without any quota. Then, water use under water quota (denoted as $\bar{w}$) is simply $min(w^*_i, \bar{w})$. Since $min(w^*_i, \bar{w}) < \bar{w}$, average water use is always less than equal to water quota $\bar{w}$. This simply states that there are farmers who do not need as much as water quota allocated to them and do not end up using all the allocated quota.
+
+**Point 2**
+
+Let $ws_i$ denote water use slack defined as $\bar{w}_i - w^*_i$. Then, for a given value of optimal water use for farmer $i$ ($w^*_i$), the expected value of water slack is written as follows.
+
+$$
+E[ws_i] = \int_{-\infty}^\infty max[0, \bar{w}_i - w^*_i]g(\bar{w}_i)d\bar{w}_i
+$$
+
+Now, consider two distribution of $\bar{w}_i$, $g^A(w_i)$ and $g^B(w_i)$ where $g^B(w_i)$ is a mean preserving spread of $g^A(w_i)$. Since $max[0, \bar{w}_i - w^*_i]$ is a convex function with respect to $\bar{w}$, $E^A[ws_i] < E^B[ws_i]$. That is, water use slack is greater under $g^B(w_i)$, meaning lower water use under $g^B(w_i)$. 
+
+```{r}
+#| eval: false
+#| echo: false
+ 
+#--- distribution of w^* ---#
+data_wbar_dist <- 
+  data.table(
+    x = seq(-10, 30, length = 1000)
+  ) %>%
+  #--- density ---#
+  .[, d_1 := dnorm(x, mean = 10, sd = 1)] %>%
+  .[, d_2 := dnorm(x, mean = 10, sd = 2)]
+
+ggplot(data_wbar_dist) +
+  geom_line(aes(y = d_1, x = x)) +
+  geom_line(aes(y = d_2, x = x)) +
+  xlab("Water Quota")
+```
+
+```{r}
+#| eval: false
+#| echo: false
+
+#--- list of allocation limit ---#
+wstar_ls <- seq(0, 10, length = 1000)
+
+slack_data <- 
+  lapply(
+   wstar_ls,
+   \(wstar) {
+    data_wbar_dist[wstar < x, .(es_1 = sum(d_1 * (x-wstar)) * 0.04, es_2 = sum(d_2 * (x-wstar)) * 0.04)] %>%
+    .[, w_unconstrained := wstar]
+   } 
+  ) %>%
+  rbindlist()
+
+slack_data[es_1 > es_2, ]
+```
+
+**Point 3**
+
+$$
+E[\pi_i] = \int_{-\infty}^\infty \pi(\bar{w_i})g(\bar{w}_i)d\bar{w}_i
+$$
+
+Since $\pi(\bar{w_i})$ is a concave function with respect to $\bar{w}$, $E^A[\pi_i] > E^B[\pi_i]$. That is, profit is greater under $g^A(w_i)$ than under $g^B(w_i)$. 
+
+# Theorem 2
+
+## Theorem
+Conditional on the same expected value of water use, uniform water quota results in a higher expected value of total profit compared to proxy quota with measurement errors.
+
+## Proof
+
+Consider two sets water use by individual farmers 
+
+$W^A = \{w^A_1, \dots, w^A_N\}$
+
+$W^B = \{w^B_1, \dots, w^B_N\}$
+
+Suppose the expected total water use are the same ($E[w^A_i] = E[w^B_i]$) and the variance of water use is smaller under A ($Var(w^A_i)$ > $Var(w^B_i)$) $^\forall i = 1, \dots, N$. Therefore, the distribution of $w^A_i$ second-order stochastically dominates $w^B_i$. Since $\frac{\partial \pi_i}{\partial w} \geq 0$ and $\frac{\partial^2 \pi_i}{\partial w^2} \leq 0$,
+
+$$
+E[\pi^A_i] = \int \pi(w^A_i)dF(w^A_i) > \int \pi(w^B_i)dG(w^B_i) = E[\pi^B_i]\;\; ^{\forall} i = 1, \dots, N
+$$
+
+Since measurement errors are independent across farmers,
+$$
+E[\sum_{i=1}^N \pi_i] = \sum_{i=1}^N E[\pi_i]
+$$
+
+Therefore, 
+
+$$
+E[\sum_{i=1}^N \pi^A_i] = \sum_{i=1}^N E[\pi^A_i] >  \sum_{i=1}^N E[\pi^B_i] = E[\sum_{i=1}^N \pi^B_i] 
+$$
+
+When proxy quota is designed so that total water use is the same as uniform water quota, $E[w^A_i] = E[w^B_i]$ and thus $E[\sum_{i=1}^N w^A_i] = E[\sum_{i=1}^N w^B_i]$. Moreover, $Var(w^A_i)$ > $Var(w^B_i)$ is satisfied. Therefore, uniform water quota always results in a higher total profit than proxy quota with measurement errors.
+
+# Theorem 3
+
+## Theorem
+
+Proxy quota trading always results in lower profit than water quota trading.
+
+## Proof
+
+Conditional on a total water quota allocated to the farmers, the first order conditions of maximizing total profit state that marginal profit of water is equated across farmers:
+
+$$
+\frac{\partial \pi_i}{\partial w_i} = \dots = \frac{\partial \pi_N}{\partial w_N}
+$$
+
+Under a water permit trading, this condition is satisfied at the equilibrium through water permit trading. 
+
+When proxy quota is traded instead of water, then at the permit market equilibrium, marginal profit of quota is equated across farmers.
+
+$$
+\frac{\partial \pi_i}{\partial p_i} = \dots = \frac{\partial \pi_N}{\partial p_N}
+$$
+
+Since $\frac{\partial \pi_i}{\partial p_i} \ne \frac{\partial \pi_i}{\partial w_i}$ in general, proxy quota trading leads to a lower profit than water quota trading for a given level of target water use.
+
+

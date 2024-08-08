@@ -1,0 +1,97 @@
+# Load the data
+```{r}
+data <-
+  readRDS(here::here("Data/water_energy_MW.rds")) %>%
+  .[, me := water_est - volaf] %>%
+  .[me < 200, ]
+```
+
+# Map
+
+```{r}
+data %>%
+  unique(by = "wellid") %>%
+  sf::st_as_sf(coords = c("longdd", "latdd"), crs = 4269) %>%
+  ggplot(data = .) +
+  geom_sf()
+```
+
+# Water vs Energy
+
+```{r}
+w_e_reg <-
+  data %>%
+  nest_by(nrdname) %>%
+  dplyr::filter(nrdname != "Twin Platte") %>%
+  dplyr::mutate(reg_ga = list(
+    mgcv::gam(volaf ~ s(kwh), data = data)
+  ))
+```
+
+## Middle
+```{r}
+w_e_reg$reg[[1]] %>% plot()
+```
+
+## Upper
+
+```{r}
+w_e_reg$reg[[2]] %>% plot()
+```
+
+Both linear. 
+
+## Yearly energy use efficiency by NRD
+
+Significant difference in energy use efficiency between URNRD and MRNRD. What are potential causes?
+
++ depth to water table
++ pumping efficiency
++ water use
+
+```{r}
+data[nrdname != "Twin Platte", ] %>%
+  .[kwh != 0, ] %>%
+  .[, mean(volaf / kwh, na.rm = TRUE), by = .(year, nrdname)]
+```
+
+Not sure what is going on in 2008.
+
+# Measurement error 
+
+Water use was estimated based on enegy use by multyplying energy use with a single coefficient to all the data.
+
+## Yearly measurement errors 
+
+
+```{r}
+data[nrdname != "Twin Platte", ] %>%
+  .[me < 200, ] %>%
+  ggplot(data = .) +
+  geom_point(aes(y = volaf, x = water_est), size = 0.1) +
+  geom_smooth(aes(y = volaf, x = water_est), size = 0.1, method = "lm") +
+  facet_grid(nrdname ~ year) +
+  geom_abline(intercept = 0, slope = 1) +
+  xlab("Water Use Estimates Based on Energy Use (acre-feet)") +
+  ylab("Observed Water Use (acre-feet)") +
+  theme_bw() +
+  theme(legend.position = "bottom") +
+  coord_equal() +
+  scale_x_continuous(breaks = (1:9) * 100) +
+  scale_y_continuous(breaks = (1:9) * 100)
+```
+
+You can observe that water use tend to be overestimated for high-water use observations.
+
+## Yearly ME (histogram)
+
+```{r}
+data[nrdname != "Twin Platte", ] %>%
+  .[, me := water_est - volaf] %>%
+  .[me < 250, ] %>%
+  ggplot(data = .) +
+  geom_histogram(aes(x = me)) +
+  geom_vline(xintercept = 0, color = "red") +
+  facet_grid(year ~ nrdname)
+```
+

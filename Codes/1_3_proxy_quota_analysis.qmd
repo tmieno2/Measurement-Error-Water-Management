@@ -1,0 +1,206 @@
+---
+title: Welfare analysis of quota and trading system with heterogeneous production functions
+---
+
+# Objectives
+
+This program analyzes the performance of the quota system where quota is determined randomly for a given level of target water use. This quota system imitates a quota system based on water use proxy where the measurement error exists.
+
++ Checks how correlation between optimal water use and measurement error affects the effectiveness of the quota system (though the answer is obvious). 
+
+
+# Setup
+
+## Theoretical setup
+
+$$
+\pi = P_c \cdot f(w) - P_w \cdot w 
+$$
+
+$$
+\frac{\partial\pi}{\partial w} = P_c \cdot \frac{\partial f(w)}{\partial w} - P_w 
+$$
+
+$$
+\pi = P_c \cdot f(\eta \cdot p) - P_w \cdot \eta \cdot p
+$$
+
+$$
+\frac{\partial \pi}{\partial p} = P_c \cdot \frac{\partial f(w)}{\partial w}\cdot \frac{\partial w}{\partial p} - P_w \cdot \eta
+= \eta\cdot\frac{\partial\pi}{\partial w}
+$$
+
+What to vary:
+
++ variance of the measurement error 
++ direction of correlation of the measurement error and optimal water use
++ water allocation 
+
++ positive: $\eta := \frac{w^*}{\bar{w^*}}\cdot \varepsilon$
++ negative: $\eta := \frac{\bar{w^*}}{w^*}\cdot \varepsilon$
++ independent: $\eta := \frac{\bar{w^*}}{w^*}\cdot \varepsilon$
+
+## Prices and costs
+```{r}
+corn_price <- 6 # (bu/acre)
+e_price <- 0.15 # ($/kwh)
+w_price <- e_price * 500 / 12 # ($/inch)
+other_cost <- 800 # ($/acre)
+```
+
+## Farmers yield response functions
+
+```{r}
+#--- number of farmers ---#
+num_farmers <- 1000
+
+#--- parameter heterogeneity ---#
+parameters <-
+  list(
+    #--- ymax ---#
+    # determines the maximum yield attainable
+    ymax_min = 160,
+    ymax_max = 250,
+    #--- alpha [0, 1] ---#
+    # determines rainfed yield. The higher, the lower rainfed yield.
+    alpha_min = 0.4,
+    alpha_max = 0.9,
+    #--- beta ---#
+    # determines how fast yield hits plateau as a function of water
+    beta_min = 0.1,
+    beta_max = 0.7
+  )
+
+#--- generate farmer data ---#
+farmer_data <- gen_farmer_data_p(num_farmers, parameters)
+
+#--- generate production data ---#
+prod_data <- gen_prod_data_p(farmer_data)
+```
+
+
+```{r}
+ggplot(farmer_data) +
+  geom_histogram(aes(x = opt_w))
+
+farmer_data[, mean(opt_w)]
+```
+
+# Simulation
+
+Set up a parameter space to loop over.
+
++ `target_w`: target water use
++ `u_dev`: maximum deviation from 1 (determines the variance of measurement error)
++ `dir_cor`: direction of the correlation between (unconstrained) optimal water use and measurement error
+
+```{r}
+par_data <-
+  data.table::CJ(
+    target_w = seq(7, 13, by = 0.25),
+    u_dev = c(0, 0.1, 0.3, 0.5),
+    dir_cor = c("+", "-", "0")
+  )
+```
+
+When `dir_cor = -` and `u_dev = 0`, measurement error is set so that the ratio of effective water use to proxy (`target_w`) is the same across farmers. For example, when `target_w` is the same as the average optimal water use, effective water use limit allocation maximizes social welfare (same as proxy permit trading). When `dir_cor = 0` and `u_dev = 0`, the quota system is simply a uniform quota system.
+
+For a given value of `target_w`, `u_dev`, and `dir_cor`,
+
++ Create a set of quota (different quota values for different farmers) system for the number of rounds specified by the user using `make_quota_data()`
+  + This function first assigns the effective water use limit and then calculate what the water to proxy conversion rate should have been
++ Conduct quota analysis using `quota_analysis_het()`
+
+## Base case (water use quota)
+
+The quota system with `dir_cor = 0` and `u_dev = 0` is equivalent to water quota (no measurement error).
+
+```{r}
+par_sets_w <- par_data[u_dev == 0 & dir_cor == "0", ]
+
+results_w <- run_analysis(cases = par_sets_w, farmer_data, prod_data)
+```
+
+
+## Proxy quota (with measurement errors)
+
+```{r, eval = FALSE}
+par_sets_p <- par_data[!(u_dev == 0 & dir_cor == "0"), ]
+
+results_p <- run_analysis(cases = par_sets_p, farmer_data, prod_data)
+
+saveRDS(quota_results, "Results/quota_results_comp_stat.rds")
+```
+
+Modify the results for presentation.
+
+```{r}
+quota_results <- readRDS(here::here("Results/quota_results_comp_stat.rds"))
+
+quota_results_het <-
+  quota_results[!(dir_cor == "0" & sd == 0), ] %>%
+  .[, dir_cor_txt := paste0("Correlation: ", dir_cor)] %>%
+  .[, dir_cor_txt := factor(dir_cor_txt, levels = paste0("Correlation: ", c("-", "0", "+")))] %>%
+  .[, sd_txt := paste0("SD: ", sd)] %>%
+  .[, sd_txt := factor(sd_txt, levels = paste0("SD: ", unique(sd)))]
+
+quota_results_no_me <-
+  quota_results[dir_cor == "0" & sd == 0, ] %>%
+  .[, .(w, target_w, profit)]
+```
+
+# Results Presentation
+
+## Water use slack
+
+Water use slack always exists when a uniform water quota is used and farmers are heterogeneous in production function. 
+
+The figure below shows water use under a range of water use limit values (x-axis) under different circumstances characterized by two parameters: 
+
+1. correlation between measurement error and unconstrained optimal water use and 
+2. standard deviation of measurement error
+
+The blue solid lines represent the water use without any measurement error. The red solid lines represent the water use with measurement error. The black solid lines represent 1 to 1 line. The vertical distance from the black line is the "slack" in water use: how much less water is used relative to the water use limit.
+
+```{r}
+ggplot() +
+  geom_line(data = quota_results_het, aes(y = w, x = target_w), color = "red") +
+  geom_line(data = quota_results_no_me, aes(y = w, x = target_w), color = "blue") +
+  geom_abline(slope = 1) +
+  facet_grid(sd_txt ~ dir_cor_txt) +
+  coord_equal()
+```
+
++ As the standard deviation of measurement error increases, water use slack becomes larger. 
++ When the correlation between measurement error and unconstrained water use is positive, water use slack with measurement error can be smaller compared to the case without measurement error. 
++ Positive correlation between them can happen in the case where energy use is used as a proxy for water use. This means that more (effective) water is allocated to those who use more water.
+
+**Note:** For the $SD = 0$ and $Correlation = +$ case, it is programmed so that quota perfectly matches with unconstrained optimal water use.
+
+### <span style = "color: red;"> What is the problem with water use slack? </span>
+
+When <span style = "color: blue;"> unbiased (in estimating water use) </span> proxy is used, policy makers may unintentionally make the quota too stringent.
+
+## Profitability
+
+```{r}
+ggplot() +
+  geom_line(data = quota_results_het, aes(y = profit, x = w), color = "red") +
+  geom_line(data = quota_results_no_me, aes(y = profit, x = w), color = "blue") +
+  facet_grid(sd_txt ~ dir_cor_txt)
+```
+
+Given an actual water use level, farming profitability is lower with measurement error except under a small parameter space where measurement error is positively correlated with unconstrained water use and the variance of measurement error is small. 
+
+
+# What does water permit trading do?
+
+Introducing trading to a water quota system increases water use if total quota stays the same (URNRD).
+
+Reduces unfairness.
+
+
+
+# Unfairness measure
+
+How much loss relative to uniform water use restriction? Compare between quota and trading.

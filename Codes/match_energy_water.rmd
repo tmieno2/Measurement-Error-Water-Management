@@ -1,0 +1,509 @@
+# Preparation
+
+```{r}
+setwd("NebraskaWaterProjectsData")
+```
+
+# Import datasets
+
+```{r}
+#--------------------------
+# Well registration
+#--------------------------
+# Notes:
+# When subsec has four letters,
+# The first two letters represent subsubseciton
+# The last two letters represent subseciton
+wells <- 
+  fread("./Data/WellRegistrationRaw/Reg08_26_2016_Raw/all_rrb_wells.csv") %>%
+  setnames(names(.), tolower(names(.))) %>%
+  .[useid == "I", ] %>%
+  .[, .(
+    wellid, twnid, rngid, rngdir, section, subsecmnemonic,
+    subsecid, nrdname, swl, pwl, totaldepth, regdate, pumprate, pumpdepth, decommissiondate,
+    pumpcoldia, ownerid, wellstatusid, lastname, longdd, latdd
+  )] %>%
+  setnames(c("twnid", "rngid", "subsecmnemonic"), c("township", "range", "subsec")) %>%
+  .[, `:=`(
+    trs = paste(township, range, section, sep = "_"),
+    subsection = ifelse(str_length(subsec) == 2, subsec, str_sub(subsec, 3, 4)),
+    subsubsection = ifelse(str_length(subsec) == 2, NA, str_sub(subsec, 1, 2))
+  )] %>%
+  .[, trs_s := paste(trs, subsection, sep = "_")] %>%
+  .[, trs_ss := paste(trs_s, subsubsection, sep = "_")] %>%
+  setorder(township, range, section) %>%
+  .[, N_sec := .N, by = .(trs)] %>%
+  .[, N_sub := .N, by = .(trs_s)] %>%
+  .[, N_subsub := .N, by = .(trs_ss)]
+
+wells <- wells %>%
+  mutate(
+    dec_date = as.Date(decommissiondate, "%m/%d/%y"),
+    dec_year = year(dec_date),
+    dec_month = month(dec_date),
+    inactive_not_dec = ifelse(is.na(dec_year) & wellstatusid == "X", 1, 0)
+  ) %>%
+  data.table()
+```
+
+```{r}
+gw <-
+  readRDS("./Data/Pumping/Processed/pumping.rds") %>%
+  mutate(source_txt = as.character(source)) %>%
+  data.table() %>%
+  .[source_txt %in% c("Meter", "METER", "metered"), ] %>%
+  .[, extended_id := paste(volaf, acres, year, county)] %>%
+  .[, count_id := .N, by = extended_id] %>% # get rid of duplicate records
+  .[count_id == 1, ]
+```
+
+## Midwest
+
+```{r}
+Midwest <- 
+  readRDS("./Data/Energy/Processed/Midwest.rds") %>%
+  select(year, district, rate, township, range, section, subsection, subsubsection, hp, kwh) %>%
+  mutate(
+    trs = paste(township, range, section, sep = "_"),
+    trs_s = paste(trs, subsection, sep = "_")
+  ) %>%
+  arrange(township, range, section, subsection, year) %>%
+  data.table() %>%
+  .[, N_sec := .N, by = .(trs, year)] %>%
+  .[, N_sub := .N, by = .(trs_s, year)]
+#--- find wells within the Midwest PPD ---#
+MW_trs_ls <- Midwest[, trs] %>% unique()
+wells_MW <- wells %>%
+  filter(trs %in% MW_trs_ls) %>%
+  data.table()
+
+#-----------------
+# single trs-trs
+#--------------------------
+# pick observations that are the only record at the section level (not many)
+MW_sec <- Midwest[N_sec == 1, ] %>%
+  left_join(., wells_MW[N_sec == 1, ], by = "trs") %>%
+  mutate(matched = ifelse(!is.na(wellid), 1, 0)) %>%
+  rename(trs_s = trs_s.x) %>%
+  select(
+    wellid, nrdname, swl, pwl, totaldepth, trs, trs_s, year, district, rate, hp, kwh, regdate, pumprate, pumpdepth, decommissiondate,
+    pumpcoldia, ownerid, wellstatusid, lastname, longdd, latdd
+  ) %>%
+  data.table()
+# MW_sec[!is.na(wellid),]
+
+#--------------------------
+# single trs_s-trs_s
+#--------------------------
+# pick observations that are the only record at the subsection level
+#--- the only energy record at the subsection level ---#
+MW_sub <- Midwest[N_sub == 1 & N_sec > 1, ] %>%
+  left_join(., wells_MW[N_sub == 1 & N_sec > 1, ], by = "trs_s") %>%
+  mutate(matched = ifelse(!is.na(wellid), 1, 0)) %>%
+  rename(trs = trs.x) %>%
+  select(
+    wellid, nrdname, swl, pwl, totaldepth, trs, trs_s, year, district, rate, hp, kwh, regdate, pumprate, pumpdepth, decommissiondate,
+    pumpcoldia, ownerid, wellstatusid, lastname, longdd, latdd
+  ) %>%
+  data.table()
+# matched_sub <- MW_sub[!is.na(wellid),]
+# unmatched_sub <- MW_sub[is.na(wellid),]
+
+#--------------------------
+# merge with pumping data
+#--------------------------
+# only MW_sub and MW_sec for now. later add MW_sub_2
+MW_we <- rbind(MW_sec, MW_sub) %>%
+  left_join(gw, ., by = c("wellid", "year")) %>%
+  filter(!is.na(district)) %>%
+  data.table()
+#-------------------
+# pick observations that are the only record at the section level (not many)
+MW_sec <- Midwest[N_sec == 1, ] %>%
+  left_join(., wells_MW[N_sec == 1, ], by = "trs") %>%
+  mutate(matched = ifelse(!is.na(wellid), 1, 0)) %>%
+  rename(trs_s = trs_s.x) %>%
+  select(
+    wellid, nrdname, swl, pwl, totaldepth, trs, trs_s, year, district, rate, hp, kwh, regdate, pumprate, pumpdepth, decommissiondate,
+    pumpcoldia, ownerid, wellstatusid, lastname, longdd, latdd
+  ) %>%
+  data.table()
+```
+
+# Midwest
+```{r}
+Midwest <- 
+  readRDS("./Data/Energy/Processed/Midwest.rds") %>%
+  select(year, district, rate, township, range, section, subsection, subsubsection, hp, kwh) %>%
+  mutate(
+    trs = paste(township, range, section, sep = "_"),
+    trs_s = paste(trs, subsection, sep = "_")
+  ) %>%
+  arrange(township, range, section, subsection, year) %>%
+  data.table() %>%
+  .[, N_sec := .N, by = .(trs, year)] %>%
+  .[, N_sub := .N, by = .(trs_s, year)]
+
+#--- find wells within the Midwest PPD ---#
+MW_trs_ls <- Midwest[, trs] %>% unique()
+
+wells_MW <- wells %>%
+  filter(trs %in% MW_trs_ls) %>%
+  data.table()
+
+#--------------------------
+# single trs-trs
+#--------------------------
+# pick observations that are the only record at the section level (not many)
+MW_sec <- 
+  Midwest[N_sec == 1, ] %>%
+  left_join(., wells_MW[N_sec == 1, ], by = "trs") %>%
+  mutate(matched = ifelse(!is.na(wellid), 1, 0)) %>%
+  rename(trs_s = trs_s.x) %>%
+  dplyr::select(
+    wellid, nrdname, swl, pwl, totaldepth, trs, trs_s, year, district, rate, hp, kwh, regdate, pumprate, pumpdepth, decommissiondate,
+    pumpcoldia, ownerid, wellstatusid, lastname, longdd, latdd
+  ) %>%
+  data.table()
+# MW_sec[!is.na(wellid),]
+#--------------------------
+# single trs_s-trs_s
+#--------------------------
+# pick observations that are the only record at the subsection level
+#--- the only energy record at the subsection level ---#
+MW_sub <- 
+  Midwest[N_sub == 1 & N_sec > 1, ] %>%
+  left_join(., wells_MW[N_sub == 1 & N_sec > 1, ], by = "trs_s") %>%
+  mutate(matched = ifelse(!is.na(wellid), 1, 0)) %>%
+  rename(trs = trs.x) %>%
+  dplyr::select(
+    wellid, nrdname, swl, pwl, totaldepth, trs, trs_s, year, district, rate, hp, kwh, regdate, pumprate, pumpdepth, decommissiondate,
+    pumpcoldia, ownerid, wellstatusid, lastname, longdd, latdd
+  ) %>%
+  data.table()
+
+# only MW_sub and MW_sec for now. later add MW_sub_2
+MW_we <- 
+  rbind(MW_sec, MW_sub) %>%
+  left_join(gw, ., by = c("wellid", "year")) %>%
+  filter(!is.na(district)) %>%
+  data.table()
+#--------------------------
+MW_we <- MW_we %>%
+  .[, w_to_e := volaf * 12 / kwh] %>%
+  .[is.infinite(w_to_e), w_to_e := NA] %>%
+  .[, coef_var := var(w_to_e, na.rm = TRUE) / mean(w_to_e, na.rm = TRUE), by = .(wellid)]
+
+well_ls <- MW_we[, wellid] %>% unique()
+well_len <- length(well_ls)
+
+# According to visual inspections, coef_var<7e-4 seems acceptable
+MW_matched_1st <- 
+  MW_we[coef_var < 7e-4, ] %>%
+  select(
+    wellid, nrdname, swl, pwl, totaldepth, year, acres, volaf, source, source_txt,
+    trs, trs_s, district, rate, hp, kwh, regdate, pumprate, pumpdepth,
+    decommissiondate, pumpcoldia, ownerid, wellstatusid,
+    lastname, longdd, latdd, w_to_e, coef_var
+  ) %>%
+  data.table()
+
+```
+
+# multiple wells and multiple energy records in the same trs
+
+```{r}
+matched_well_ls <- MW_matched_1st[, wellid] %>% unique()
+matched_trs_s_ls <- MW_matched_1st[, trs_s] %>% unique()
+wells_2nd <- wells_MW[!(wellid %in% matched_well_ls), ]
+e_2nd <- Midwest[!(trs_s %in% matched_trs_s_ls), ]
+temp_match_2nd <- e_2nd[N_sub == 1, ] %>%
+  left_join(., wells_2nd, by = "trs") %>%
+  left_join(., gw, by = c("wellid", "year")) %>%
+  mutate(matched = ifelse(!is.na(wellid), 1, 0)) %>%
+  filter(matched == 1) %>%
+  rename(trs_s = trs_s.x) %>%
+  select(
+    wellid, nrdname, swl, pwl, totaldepth, trs, trs_s, year, volaf, acres, source_txt, source, hp,
+    kwh, regdate, pumprate, pumpdepth, decommissiondate, district, rate,
+    pumpcoldia, ownerid, wellstatusid, lastname, longdd, latdd, matched
+  ) %>%
+  mutate(well_trs_s = paste(wellid, trs_s, sep = "_")) %>%
+  mutate(w_to_e = volaf * 12 / kwh) %>%
+  filter(!is.na(volaf)) %>%
+  arrange(well_trs_s, year) %>%
+  data.table() %>%
+  .[is.infinite(w_to_e), w_to_e := NA] %>%
+  .[, coef_var := var(w_to_e, na.rm = TRUE) / mean(w_to_e, na.rm = TRUE), by = .(well_trs_s)]
+#--- list of the trs ---#
+trs_ls <- temp_match_2nd[, trs] %>% unique()
+trs_len <- length(trs_ls)
+#++++++++++++++++
+matched_store_all <- list()
+for (i in 1:trs_len) { # loop over trs
+  #--- select well-energy records combinations in the temporary trs ---#
+  temp_match <- temp_match_2nd[trs == trs_ls[i] & !is.na(coef_var), .(well_trs_s, wellid, trs_s, coef_var)] %>%
+    unique(by = "well_trs_s")
+  well_len <- temp_match[, wellid] %>%
+    unique() %>%
+    length()
+  matched_store_i <- list()
+  for (j in 1:well_len) { # loop over wells
+    if (min(temp_match[, coef_var]) < 7e-4) { # if there is a match
+      #--- identify the best matching well-energy combination ---#
+      min_index <- which.min(temp_match[, coef_var])
+      get_well <- temp_match[min_index, wellid]
+      get_trs_s <- temp_match[min_index, trs_s]
+      #--- extract the matched data and store in the temporary storage ---#
+      matched_store_i[[j]] <- temp_match_2nd %>%
+        filter(wellid == get_well & trs_s == get_trs_s) %>%
+        data.table()
+      #--- exclude the matched wellid and energy records  ---#
+      temp_match <- temp_match %>%
+        filter(!(wellid == get_well | trs_s == get_trs_s)) %>%
+        data.table()
+    } else { # if no good enough matches
+      break # end the loop
+    }
+  }
+  matched_store_all[[i]] <- rbindlist(matched_store_i)
+}
+
+MW_matched_2nd <- rbindlist(matched_store_all) %>%
+  select(
+    wellid, nrdname, swl, pwl, totaldepth, year, acres, volaf, source, source_txt,
+    trs, trs_s, district, rate, hp, kwh, regdate, pumprate, pumpdepth,
+    decommissiondate, pumpcoldia, ownerid, wellstatusid,
+    lastname, longdd, latdd, w_to_e, coef_var
+  ) %>%
+  data.table()
+
+# Notes:
+# According to visual inspections, coef_var<7e-4 seems acceptable
+
+MW_matched_1st <- MW_we[coef_var < 7e-4, ] %>%
+  dplyr::select(
+    wellid, nrdname, swl, pwl, totaldepth, year, acres, volaf, source, source_txt,
+    trs, trs_s, district, rate, hp, kwh, regdate, pumprate, pumpdepth,
+    decommissiondate, pumpcoldia, ownerid, wellstatusid,
+    lastname, longdd, latdd, w_to_e, coef_var
+  ) %>%
+  data.table()
+```
+
+## Multiple wells and multiple energy records in the same trs
+
+```{r}
+matched_well_ls <- MW_matched_1st[, wellid] %>% unique()
+matched_trs_s_ls <- MW_matched_1st[, trs_s] %>% unique()
+wells_2nd <- wells_MW[!(wellid %in% matched_well_ls), ]
+e_2nd <- Midwest[!(trs_s %in% matched_trs_s_ls), ]
+temp_match_2nd <- e_2nd[N_sub == 1, ] %>%
+  left_join(., wells_2nd, by = "trs") %>%
+  left_join(., gw, by = c("wellid", "year")) %>%
+  mutate(matched = ifelse(!is.na(wellid), 1, 0)) %>%
+  filter(matched == 1) %>%
+  rename(trs_s = trs_s.x) %>%
+  dplyr::select(
+    wellid, nrdname, swl, pwl, totaldepth, trs, trs_s, year, volaf, acres, source_txt, source, hp,
+    kwh, regdate, pumprate, pumpdepth, decommissiondate, district, rate,
+    pumpcoldia, ownerid, wellstatusid, lastname, longdd, latdd, matched
+  ) %>%
+  mutate(well_trs_s = paste(wellid, trs_s, sep = "_")) %>%
+  mutate(w_to_e = volaf * 12 / kwh) %>%
+  filter(!is.na(volaf)) %>%
+  arrange(well_trs_s, year) %>%
+  data.table() %>%
+  .[is.infinite(w_to_e), w_to_e := NA] %>%
+  .[, coef_var := var(w_to_e, na.rm = TRUE) / mean(w_to_e, na.rm = TRUE), by = .(well_trs_s)]
+#--- list of the trs ---#
+trs_ls <- temp_match_2nd[, trs] %>% unique()
+trs_len <- length(trs_ls)
+#++++++++++++++++
+# loop over trs to find matches
+#++++++++++++++++
+matched_store_all <- list()
+for (i in 1:trs_len) { # loop over trs
+  #--- select well-energy records combinations in the temporary trs ---#
+  temp_match <- temp_match_2nd[trs == trs_ls[i] & !is.na(coef_var), .(well_trs_s, wellid, trs_s, coef_var)] %>%
+    unique(by = "well_trs_s")
+  well_len <- temp_match[, wellid] %>%
+    unique() %>%
+    length()
+  matched_store_i <- list()
+  for (j in 1:well_len) { # loop over wells
+    if (min(temp_match[, coef_var]) < 7e-4) { # if there is a match
+      #--- identify the best matching well-energy combination ---#
+      min_index <- which.min(temp_match[, coef_var])
+      get_well <- temp_match[min_index, wellid]
+      get_trs_s <- temp_match[min_index, trs_s]
+      #--- extract the matched data and store in the temporary storage ---#
+      matched_store_i[[j]] <- temp_match_2nd %>%
+        filter(wellid == get_well & trs_s == get_trs_s) %>%
+        data.table()
+      #--- exclude the matched wellid and energy records  ---#
+      temp_match <- temp_match %>%
+        filter(!(wellid == get_well | trs_s == get_trs_s)) %>%
+        data.table()
+    } else { # if no good enough matches
+      break # end the loop
+    }
+  }
+  matched_store_all[[i]] <- rbindlist(matched_store_i)
+}
+
+MW_matched_2nd <- rbindlist(matched_store_all) %>%
+  dplyr::select(
+    wellid, nrdname, swl, pwl, totaldepth, year, acres, volaf, source, source_txt,
+    trs, trs_s, district, rate, hp, kwh, regdate, pumprate, pumpdepth,
+    decommissiondate, pumpcoldia, ownerid, wellstatusid,
+    lastname, longdd, latdd, w_to_e, coef_var
+  ) %>%
+  data.table()
+# ggplot
+
+MW_we <- rbind(MW_matched_1st, MW_matched_2nd) %>%
+  .[, hours := kwh / (hp * 0.746)] %>%
+  .[, gpm := (volaf * 12 * 27154) / (hours * 60)]
+MW_we[, wellid] %>% unique()
+matched_all_ls <- MW_we[, wellid] %>% unique()
+length(matched_all_ls)
+wells_MW
+unmatched_all_ls
+all_wells_MW
+all_wells_MW
+#--------------------------
+MW_we <- MW_we %>%
+  .[, w_to_e := volaf * 12 / kwh] %>%
+  .[is.infinite(w_to_e), w_to_e := NA] %>%
+  .[, coef_var := var(w_to_e, na.rm = TRUE) / mean(w_to_e, na.rm = TRUE), by = .(wellid)]
+well_ls <- MW_we[, wellid] %>% unique()
+well_len <- length(well_ls)
+#--- find wells within the Midwest PPD ---#
+MW_trs_ls <- Midwest[, trs] %>% unique()
+wells_MW <- wells %>%
+  filter(trs %in% MW_trs_ls) %>%
+  data.table()
+wells_MW
+wells_MW
+matched_all_ls <- MW_we[, wellid] %>% unique()
+matched_all_ls <- MW_we[, wellid] %>% unique()
+u
+unmatched_all_ls <- wells_MW[!(wellid %in% matched_all_ls), ]
+unmatched_all_ls
+matched_all_ls <- MW_we[, wellid] %>% unique()
+unmatched_all_ls <- wells_MW[!(wellid %in% matched_all_ls), wellid] %>% unique()
+unmatched_all_ls
+matched_all_ls
+length(unmatched_all_ls)
+saveRDS(matched_all_ls, "./Data/Water_Energy/matched_wells_MW.rds")
+saveRDS(unmatched_all_ls, "./Data/Water_Energy/unmatched_wells_MW.rds")
+saveRDS(MW_trs_ls, "./Data/Water_Energy/MW_trs_ls.rds")
+```
+
+```{r}
+all_gw
+all_gw <- readRDS("~/Dropbox/NebraskaWaterProjectsData/Data/Pumping/Processed/pumping.rds") %>%
+  mutate(source_txt = as.character(source)) %>%
+  data.table() %>%
+  .[source_txt %in% c("Meter", "METER", "metered"), ] %>%
+  .[, extended_id := paste(volaf, acres, year, county)] %>%
+  .[, count_id := .N, by = extended_id] %>% # get rid of duplicate records
+  .[count_id == 1, ]
+all_gw
+wells <- fread("~/Dropbox/NebraskaWaterProjectsData/Data/WellRegistrationRaw/Reg08_26_2016_Raw/all_rrb_wells.csv") %>%
+  setnames(names(.), tolower(names(.))) %>%
+  .[useid == "I", ] %>%
+  .[, .(
+    wellid, twnid, rngid, rngdir, section, subsecmnemonic,
+    subsecid, nrdname, swl, pwl, totaldepth, regdate, pumprate, pumpdepth, decommissiondate,
+    pumpcoldia, ownerid, wellstatusid, lastname, longdd, latdd
+  )] %>%
+  setnames(c("twnid", "rngid", "subsecmnemonic"), c("township", "range", "subsec")) %>%
+  .[, `:=`(
+    trs = paste(township, range, section, sep = "_"),
+    subsection = ifelse(str_length(subsec) == 2, subsec, str_sub(subsec, 3, 4)),
+    subsubsection = ifelse(str_length(subsec) == 2, NA, str_sub(subsec, 1, 2))
+  )] %>%
+  .[, trs_s := paste(trs, subsection, sep = "_")] %>%
+  .[, trs_ss := paste(trs_s, subsubsection, sep = "_")] %>%
+  setorder(township, range, section) %>%
+  .[, N_sec := .N, by = .(trs)] %>%
+  .[, N_sub := .N, by = .(trs_s)] %>%
+  .[, N_subsub := .N, by = .(trs_ss)]
+# wells[N_sub>4,]
+#
+wells <- fread("~/Dropbox/NebraskaWaterProjectsData/Data/WellRegistrationRaw/Reg08_26_2016_Raw/all_rrb_wells.csv") %>%
+  setnames(names(.), tolower(names(.))) %>%
+  .[useid == "I", ] %>%
+  .[, .(
+    wellid, twnid, rngid, rngdir, section, subsecmnemonic,
+    subsecid, nrdname, swl, pwl, totaldepth, regdate, pumprate, pumpdepth, decommissiondate,
+    pumpcoldia, ownerid, wellstatusid, lastname, longdd, latdd
+  )] %>%
+  setnames(c("twnid", "rngid", "subsecmnemonic"), c("township", "range", "subsec")) %>%
+  .[, `:=`(
+    trs = paste(township, range, section, sep = "_"),
+    subsection = ifelse(str_length(subsec) == 2, subsec, str_sub(subsec, 3, 4)),
+    subsubsection = ifelse(str_length(subsec) == 2, NA, str_sub(subsec, 1, 2))
+  )]
+all_gw <- readRDS("~/Dropbox/NebraskaWaterProjectsData/Data/Pumping/Processed/pumping.rds") %>%
+  mutate(source_txt = as.character(source)) %>%
+  data.table() %>%
+  .[source_txt %in% c("Meter", "METER", "metered"), ] %>%
+  .[, count_id := .N, by = extended_id] %>% # get rid of duplicate records
+  .[count_id == 1, ] %>%
+  wells[., on = "wellid"]
+all_gw <- readRDS("~/Dropbox/NebraskaWaterProjectsData/Data/Pumping/Processed/pumping.rds") %>%
+  mutate(source_txt = as.character(source)) %>%
+  data.table() %>%
+  .[source_txt %in% c("Meter", "METER", "metered"), ] %>%
+  .[, extended_id := paste(volaf, acres, year, county)] %>%
+  .[, count_id := .N, by = extended_id] %>% # get rid of duplicate records
+  .[count_id == 1, ] %>%
+  wells[., on = "wellid"]
+all_gw <- readRDS("~/Dropbox/NebraskaWaterProjectsData/Data/Pumping/Processed/pumping.rds") %>%
+  mutate(source_txt = as.character(source)) %>%
+  data.table() %>%
+  .[source_txt %in% c("Meter", "METER", "metered"), ] %>%
+  wells[., on = "wellid"]
+all_gw
+MW_wells <- readRDS("~/Dropbox/NebraskaWaterProjectsData/Data/Pumping/Processed/pumping.rds") %>%
+  mutate(source_txt = as.character(source)) %>%
+  data.table() %>%
+  .[source_txt %in% c("Meter", "METER", "metered"), ] %>%
+  wells[., on = "wellid"] %>%
+  .[trs %in% MW_trs_ls, ]
+MW_wells
+wells <- fread("~/Dropbox/NebraskaWaterProjectsData/Data/WellRegistrationRaw/Reg08_26_2016_Raw/all_rrb_wells.csv") %>%
+  setnames(names(.), tolower(names(.))) %>%
+  .[useid == "I", ] %>%
+  .[, .(
+    wellid, twnid, rngid, rngdir, section, subsecmnemonic,
+    subsecid, nrdname, swl, pwl, totaldepth, regdate, pumprate, pumpdepth, decommissiondate,
+    pumpcoldia, ownerid, wellstatusid, lastname, longdd, latdd
+  )] %>%
+  setnames(c("twnid", "rngid", "subsecmnemonic"), c("township", "range", "subsec")) %>%
+  .[, `:=`(
+    trs = paste(township, range, section, sep = "_"),
+    subsection = ifelse(str_length(subsec) == 2, subsec, str_sub(subsec, 3, 4)),
+    subsubsection = ifelse(str_length(subsec) == 2, NA, str_sub(subsec, 1, 2))
+  )]
+matched_all_ls <- readRDS("./Data/Water_Energy/matched_wells_MW.rds")
+unmatched_all_ls <- readRDS("./Data/Water_Energy/unmatched_wells_MW.rds")
+MW_wells <- readRDS("~/Dropbox/NebraskaWaterProjectsData/Data/Pumping/Processed/pumping.rds") %>%
+  mutate(source_txt = as.character(source)) %>%
+  data.table() %>%
+  .[source_txt %in% c("Meter", "METER", "metered"), ] %>%
+  wells[., on = "wellid"] %>%
+  .[, matched := NA] %>%
+  .[wellid %in% matched_all_ls, matched := TRUE] %>%
+  .[wellid %in% unmatched_all_ls, matched := FALSE] %>%
+  .[!is.na(matched), ]
+MW_wells
+MW_wells[, .(volaf, acres), by = .(matched, year)]
+MW_wells[, .(volaf = mean(volaf), acres = mean(acres)), by = .(matched, year)]
+MW_wells[, .(volaf = mean(volaf), acres = mean(acres)), by = .(matched)]
+MW_wells[, .(volaf = mean(volaf, na.rm = TRUE), acres = mean(acres, na.rm = TRUE)), by = .(matched, year)]
+MW_wells[, .(volaf = mean(volaf, na.rm = TRUE), acres = mean(acres, na.rm = TRUE)), by = .(matched)]
+```

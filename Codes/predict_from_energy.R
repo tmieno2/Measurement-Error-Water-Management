@@ -1,0 +1,53 @@
+######################################
+# Predict water use from energy use data
+######################################
+# written by Taro Mieno on 06/14/2017
+
+#===================================
+# Preparation 
+#===================================
+#--- import data ---#
+data <- readRDS('~/Box Sync/NebraskaWaterProjectsData/Data/Water_Energy/MW_energy_water.rds')
+
+#===================================
+# Naive water use prediction
+#===================================
+# data[,w_to_e] %>% hist()
+
+data <- data %>% 
+	.[,mean_w_to_e:=mean(w_to_e,na.rm=TRUE),by=nrdname] %>% 
+	.[,water_est:=kwh*mean_w_to_e/12]
+
+saveRDS('./Data/water_energy_MW.rds')
+fwrite(data,'./Data/water_energy_MW.csv')
+
+ggplot(data=data[nrdname!='Twin Platte',]) +
+	geom_point(aes(y=volaf,x=water_est),size=0.1) +
+	facet_grid(year~nrdname) +
+	geom_abline(intercept=0,slopw=1) +
+	xlab('Water Use Estimates Based on Energy Use (acre-feet)') +
+	ylab('Observed Water Use (acre-feet)') +
+	theme(
+		legend.position='bottom'
+		)
+ggsave('./Graphs/how_good_energy.pdf',height=10,width=6)
+
+ggplot(data=data[!is.na(w_to_e) & nrdname!='Twin Platte',]) +
+	geom_boxplot(aes(y=w_to_e,x=factor(year)),alpha=0.3) +
+	facet_grid(nrdname~.) +
+	ylab('Water (acre-feet)/Energy (kwh)') +
+	xlab('Year')
+
+ggsave('./Graphs/water_to_energy.pdf')
+
+ggplot(data=data[!is.na(w_to_e) & nrdname!='Twin Platte',]) +
+	geom_density(aes(x=w_to_e,fill=factor(year)),alpha=0.3) +
+	facet_grid(nrdname~.) +
+	ylab('Water (acre-feet)/Energy (kwh)') +
+	xlab('Year')
+
+ggsave('./Graphs/water_to_energy.pdf')
+
+
+
+
