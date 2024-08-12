@@ -1,0 +1,352 @@
+---
+title: Create figures for the article
+---
+
+
+# Preparation 
+
+## Load datasets
+
+```{r}
+system_data <- readRDS(here::here("Results/quota_results_comp_stat.rds"))
+
+sum_res <-
+  rbind(
+    readRDS(here::here("Results/proxy_results_summary.rds")),
+    readRDS(here::here("Results/water_results_summary.rds"))
+  ) %>%
+  .[, dir_cor_txt := paste0("Correlation: ", dir_cor)] %>%
+  .[, dir_cor_txt := factor(dir_cor_txt, levels = paste0("Correlation: ", c("-", "0", "+")))] %>%
+  .[, prod_het := str_to_title(prod_het)] %>%
+  .[, prod_het := factor(prod_het, c("Zero", "Medium", "High"))]
+```
+
+Load prices and costs:
+
+```{r}
+load(here::here("Results/prices_costs.RData"))
+```
+
+# Visualize: Summary of Production Data
+
+## Distribution of unconstrained optimal water use by heterogeneity degree
+
+```{r}
+(
+  g_opt_w_dist <-
+    system_data %>%
+    dplyr::select(prod_het, farmer_data) %>%
+    unnest(cols = c(farmer_data)) %>%
+    data.table() %>%
+    .[, type_txt := case_when(
+      prod_het == "zero" ~ "Heterogeneity: Zero",
+      prod_het == "medium" ~ "Heterogeneity: Medium",
+      prod_het == "high" ~ "Heterogeneity: High"
+    )] %>%
+    .[, type_txt := factor(
+      type_txt,
+      levels = c("Heterogeneity: Zero", "Heterogeneity: Medium", "Heterogeneity: High")
+    )] %>%
+    .[opt_w_true < 30, ] %>%
+    ggplot(data = .) +
+    geom_histogram(
+      aes(
+        x = opt_w_true,
+        y = ifelse(after_stat(count) > 0, after_stat(count), NA)
+      ),
+      color = "blue",
+      fill = NA
+    ) +
+    facet_grid(type_txt ~ .) +
+    xlab("Optimal Water Use (inches)") +
+    ylab("Count") +
+    scale_x_continuous(breaks = seq(0, 30, by = 2)) +
+    theme_bw()
+)
+
+ggsave(here::here("Writing/figures/g_opt_w_dist.pdf"), g_opt_w_dist, height = 5, width = 6)
+```
+
+# Visualize: Results
+
+# Visualize: Illustration
+
+Here, illustrative figures to gain insights into the underlying economic intuitions of the results are created.
+
+## Homogeneous farmers under quota
+
+Use the first farmer under the category of `prod_het == "medium"`. It is duplicated to be farmers A and B. 
+
+Under the water quota system, both farmers A and B will be given water quota of 7.
+
+```{r}
+#| echo: false
+
+w_A <- 7 # water quota for farmer A
+w_B <- 7 # water quota for farmer B
+```
+
+Under the proxy quota system, both farmers A and B will be given proxy quota of 7. However, the effective water quota for them are different and defined down below.
+
+```{r}
+eW_A <- 4 # effective water quota for farmer A
+eW_B <- 10 # effective water for farmer B
+```
+
+Farmer A is unfairly treated with its water use over-estimated. Specifically, 1 proxy quota is equivalent to `eW_A/w_A` (`r eW_A/w_A`). On the other hand, farmer B is lucky with its water use under-estimated. Specifically, 1 proxy quota is equivalent to `eW_B/w_B` (`r eW_B/w_B`).
+
+$$
+P_A = \frac{7 \cdot W_A}{4}
+P_B = \frac{7 \cdot W_B}{10}
+$$
+
+
+Create farmer production data.
+
+```{r}
+farm_data_1 <-
+  data.table(system_data)[prod_het == "medium", farmer_data][[1]] %>%
+  #--- use farmer 1 ---#
+  .[farmer == 1, ] %>%
+  .[, farmer := NULL] %>%
+  expand_grid_df(., data.table(w = seq(0, 15, by = 0.1))) %>%
+  .[, yield := ymax * (1 - alpha * exp(-beta * w))] %>%
+  .[, w_cost := w_price * w] %>%
+  .[, profit := corn_price * yield - w_cost - other_cost] %>%
+  .[, marginal_cost_w := w_price] %>%
+  .[, marginal_prod_w := ymax * alpha * beta * exp(-beta * w)] %>%
+  .[, marginal_profit_w := marginal_prod_w * corn_price - marginal_cost_w]
+```
+
+Make production data at the quota level.
+
+```{r}
+opt_w <- unique(farm_data_1$opt_w)
+
+production_at_quota <-
+  data.table(
+    farmer = c("A", "B", "A", "B"),
+    measure_type = c("Water", "Water", "Proxy", "Proxy"),
+    quota = c(w_A, w_B, eW_A, eW_B)
+  ) %>%
+  .[, w := quota] %>%
+  .[quota > opt_w, w := opt_w] %>%
+  farm_data_1[., on = .(w), roll = "nearest"]
+```
+
+Visualize the production data.
+
+```{r}
+#| warning: false
+(
+  g_illustration_homogeneous <-
+    ggplot() +
+    geom_line(
+      data = farm_data_1,
+      aes(y = profit, x = w)
+    ) +
+    geom_vline(
+      data = production_at_quota,
+      aes(xintercept = quota),
+      linetype = 2,
+      color = "red"
+    ) +
+    geom_point(
+      data = production_at_quota,
+      aes(y = profit, x = w),
+      color = "blue",
+      size = 2
+    ) +
+    facet_grid(measure_type ~ farmer) +
+    ylim(0, NA) +
+    xlab("Water Use (inches)") +
+    ylab("Profit ($/acre)") +
+    theme_bw()
+)
+
+ggsave("Writing/figures/g_illustration_homogeneous.pdf", g_illustration_homogeneous, height = 4, width = 6)
+```
+
+## Homogeneous farmers under quota trading
+
+Illustrate the effect of allowing proxy trading. Water trading does not happen as it is always optimal.
+
+Create production data for two homogeneous farmers. They differ in water/proxy ratio. 
+
+For farmer A,
+
+$$
+P_A = \frac{7 \cdot W_A}{4}
+$$
+
+$$
+\frac{\partial \pi}{\partial p} =  \frac{\partial \pi}{\partial w} \cdot \frac{\partial w}{\partial p} = \frac{\partial \pi}{\partial w} \cdot \frac{4}{7}
+$$
+
+
+```{r}
+farm_data_A <-
+  copy(farm_data_1) %>%
+  .[, farmer := "A"] %>%
+  .[, marginal_profit_p := marginal_profit_w / w_A * p_A]
+
+farm_data_B <-
+  copy(farm_data_1) %>%
+  .[, farmer := "B"] %>%
+  .[, marginal_profit_p := marginal_profit_w / w_B * p_B]
+```
+
+Find the results of proxy quota trading, at which the marginal profit of proxy is equalized between the farmers.
+
+```{r}
+#--- link water use and marginal profit of proxy  ---#
+mpp_w_A <- gam(w ~ s(marginal_profit_p), data = farm_data_A)
+mpp_w_B <- gam(w ~ s(marginal_profit_p), data = farm_data_B)
+
+#--- proxy quota trading results ---#
+w_data <-
+  data.table(
+    marginal_profit_p = seq(0, min(farm_data_A[, max(marginal_profit_p)], farm_data_B[, max(marginal_profit_p)]), length = 1001)
+  ) %>%
+  .[, w_A := predict(mpp_w_A, newdata = .)] %>%
+  .[, w_B := predict(mpp_w_B, newdata = .)] %>%
+  .[, tot_w := w_A + w_B] %>%
+  .[, dev := abs(tot_w - 14)] %>%
+  .[dev == min(dev), ]
+```
+
+Associate profit to the water use levels observed under the proxy quota trading.
+
+```{r}
+pi_w_A <- gam(profit ~ s(w), data = farm_data_A)
+pi_w_B <- gam(profit ~ s(w), data = farm_data_B)
+
+proxy_trade_data_A <-
+  data.table(w = w_data$w_A) %>%
+  .[, profit := predict(pi_w_A, newdata = .)] %>%
+  .[, farmer := "A"]
+
+proxy_trade_data_B <-
+  data.table(w = w_data$w_B) %>%
+  .[, profit := predict(pi_w_B, newdata = .)] %>%
+  .[, farmer := "B"]
+
+proxy_trade_data <-
+  rbind(proxy_trade_data_A, proxy_trade_data_B) %>%
+  .[, measure_type := "Proxy"] %>%
+  .[, instrument_type := "Trading"]
+```
+
+Visualize the trading results.
+
+```{r}
+(
+  g_illustration_homogeneous <-
+    ggplot() +
+    geom_line(
+      data = farm_data_1,
+      aes(y = profit, x = w)
+    ) +
+    geom_vline(
+      data = production_at_quota,
+      aes(xintercept = quota),
+      linetype = 2,
+      color = "red"
+    ) +
+    geom_point(
+      data = production_at_quota,
+      aes(y = profit, x = w),
+      color = "blue",
+      size = 2
+    ) +
+    geom_point(
+      data = proxy_trade_data, 
+      aes(x = w, y = profit)
+    ) +
+    facet_grid(measure_type ~ farmer) +
+    ylim(0, NA) +
+    xlab("Water Use (inches)") +
+    ylab("Profit ($/acre)") +
+    theme_bw()
+
+)
+```
+
+## Heterogeneous farmers under quota
+
+```{r}
+farm_data_het <-
+  data.table(system_data)[prod_het == "medium", farmer_data][[1]] %>%
+  #--- pick the farmers whose optimal water use is 7 and 13 ---#
+  .[, dev_from_7 := abs(opt_w - 7)] %>%
+  .[, dev_from_13 := abs(opt_w - 13)] %>%
+  .[(dev_from_7 == min(dev_from_7) | dev_from_13 == min(dev_from_13)), ] %>%
+  expand_grid_df(., data.table(w = seq(0, 15, by = 0.1))) %>%
+  #--- production data ---#
+  .[, yield := ymax * (1 - alpha * exp(-beta * w))] %>%
+  .[, w_cost := w_price * w] %>%
+  .[, profit := corn_price * yield - w_cost - other_cost] %>%
+  .[, marginal_cost_w := w_price] %>%
+  .[, marginal_prod_w := ymax * alpha * beta * exp(-beta * w)] %>%
+  .[, marginal_profit_w := marginal_prod_w * corn_price - marginal_cost_w] %>%
+  .[, farmer_txt := "A"] %>%
+  .[opt_w == max(opt_w), farmer_txt := "B"]
+```
+
+Production data at the quota levels.
+
+```{r}
+opt_w <- farm_data_het[, .(opt_w = unique(opt_w)), by = farmer_txt]
+
+quota_data_het <-
+  data.table(
+    farmer_txt = c("A", "B", "A", "B"),
+    measure_type = c("Water", "Water", "Proxy", "Proxy"),
+    quota = c(w_A, w_B, p_A, p_B)
+  ) %>%
+  opt_w[., on = .(farmer_txt)] %>%
+  .[, w := quota] %>%
+  .[quota > opt_w, w := opt_w] %>%
+  setnames("farmer_txt", "farmer_id") %>%
+  nest_by(farmer_id) %>%
+  dplyr::mutate(merged = list(
+    farm_data_het[farmer_txt == farmer_id, ][data.table(data), on = .(w), roll = "nearest"]
+  )) %>%
+  dplyr::select(farmer_id, merged) %>%
+  unnest(cols = c(merged)) %>%
+  data.table() %>%
+  .[, .(farmer, farmer_txt, w, opt_w, profit, measure_type, quota)]
+```
+
+Visualize the production data.
+
+```{r}
+#| warning: false
+(
+  g_illustration_het <-
+    ggplot() +
+    geom_line(
+      data = farm_data_het,
+      aes(y = profit, x = w)
+    ) +
+    geom_vline(
+      data = quota_data_het,
+      aes(xintercept = quota),
+      linetype = 2,
+      color = "red"
+    ) +
+    geom_point(
+      data = quota_data_het,
+      aes(y = profit, x = w),
+      color = "blue",
+      size = 2
+    ) +
+    facet_grid(measure_type ~ farmer_txt) +
+    ylim(0, NA) +
+    xlab("Water Use (inches)") +
+    ylab("Profit ($/acre)") +
+    theme_bw()
+)
+
+ggsave("Writing/figures/g_illustration_het.pdf", g_illustration_het, height = 4, width = 6)
+```

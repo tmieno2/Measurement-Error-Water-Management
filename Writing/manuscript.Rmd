@@ -111,22 +111,7 @@ sum_res <-
 Figure \@ref(fig:profit-quota-water-het) below compares profit from agricultural production as a function of actual water use between water and proxy quota across three different production heterogeneity levels. When there is no heterogeneity in farmers' production function, water quota is the most cost effective way to achieve a water use reduction goal (highest profit achievable for a given level of actual water use). Under this circumstance, proxy quota with unbiased measurement errors achieves worse than water quota due to asymmetry in downside and upside risk of water use.
 
 ```{r profit-quota-water-het, fig.cap = "Comparison of profit from agricultural production between the water and quota systems"}
-(
-  g_profit_quota_w_vs_p <-
-    sum_res %>%
-    .[instrument_type == "Quota", ] %>%
-    .[(dir_cor == "0" & u_dev == 0.3 & measure_type == "Proxy") | measure_type == "Water", ] %>%
-    ggplot(data = .) +
-    geom_line(aes(y = profit, x = w, color = measure_type)) +
-    facet_grid(. ~ prod_het) +
-    ylab("Target Water Use (inches)") +
-    xlab("Realized Water Use (inches)") +
-    scale_color_discrete(name = "Measurement Type") +
-    theme_bw() +
-    theme(
-      legend.position = "bottom"
-    )
-)
+knitr::include_graphics("figures/g_profit_quota_w_vs_p.pdf")
 ```
 
 
@@ -187,27 +172,8 @@ When measurement error is independent and production function is concave, water 
 \textbf{Convert $u\_dev$ to $R^2$.} 
 
 ```{r increase-me-degree, fig.cap = "The impacts of an increase in the degree of measurement error on profit"}
-q_udev <- sum_res[(dir_cor == "0" & measure_type == "Proxy"), ]
-w_udev <-
-  sum_res[measure_type == "Water", ] %>%
-  .[, u_dev := NULL] %>%
-  expand_grid_df(., data.table(u_dev = c(0.1, 0.3, 0.5)))
 
-quota_plot_data_comp_stat <-
-  rbind(q_udev, w_udev) %>%
-  .[instrument_type == "Quota", ]
-
-(
-  g_profit_quota_comp_stat <-
-    ggplot(data = quota_plot_data_comp_stat) +
-    geom_line(aes(y = profit, x = w, color = measure_type)) +
-    facet_grid(u_dev ~ prod_het) +
-    ylab("Profit ($/acre)") +
-    xlab("Realized Water Use (inches)") +
-    scale_color_discrete(name = "Measurement Type") +
-    theme_bw() +
-    theme(legend.position = "bottom")
-)
+knitr::include_graphics("figures/g_profit_quota_comp_stat.pdf")
 ```
 
 ## The effect of allowing trading quota
@@ -230,14 +196,22 @@ While water-quota and proxy-quota trading perform about the same, water-quota al
 
 ## Use of proxy can damage distributional equity
 
-Figure below presents the ratio of profit under quota-based relative to water-based system for quota (red) and permit trading (blue). Ratio of less than 1 indicates making less profit under the quota-based system compared to the water-based system.
+Figure \@ref(fig:distributional-equity) presents the cumulative probability of the ratio of profit under quota-based relative to water-based system for quota (red) and permit trading (blue). Ratio of less than 1 indicates making less profit under the quota-based system compared to the water-based system. If farmers make just as much profir under proxy-based regulation compared to water-based regulation, then the cumulative probability line would be a vertical line at 1. For example, under the high degree of measurement error and medium heterogenenity scenario, some farmers would make about the half of what they would make under the water quota system. At the lower end of the distribution are farmers who would be constrained severely by water use quota, but whose water use estiamtes are much higher than their actual water use. At the higher end of the distribution are farmers who would be constrained by water use quota, but whose water use estiamtes are much lower than their actual water use. Famres who suffer significantly under the quota system can develop strong dissatisfaction of the quota-based regulation system, which in turn may lead to installing water meter themselves. If they discover the over-estimation of their water use, they may appeal to legal actions against the administrator for their unfair treatment. Allowind quota trading greatly diminishes the distributional inequality, though not completely. This is because unfortunate farmers who suffered from over-estimation of their water use can now at least purchase proxy quota to increase their production level.
+
 
 ```{r distributional-equity, fig.cap = "Distribution of profit under various regulation systems"}
 knitr::include_graphics("figures/g_profit_ratio.pdf")
 ```
 
 
+
+
 # Discussion
+
+## Limitations
+
+Assumptions.
+Temporal
 
 # Methods
 
@@ -259,33 +233,6 @@ The datasets created in this article are all computer-generated using R codes. A
 
 ## Distribution of optimal water use under no water use constraints
 
-```{r, fig.height = 5}
-system_data %>%
-  dplyr::select(prod_het, farmer_data) %>%
-  unnest(cols = c(farmer_data)) %>%
-  data.table() %>%
-  .[, type_txt := case_when(
-    prod_het == "zero" ~ "Heterogeneity: Zero",
-    prod_het == "medium" ~ "Heterogeneity: Medium",
-    prod_het == "high" ~ "Heterogeneity: High"
-  )] %>%
-  .[, type_txt := factor(
-    type_txt,
-    levels = c("Heterogeneity: Zero", "Heterogeneity: Medium", "Heterogeneity: High")
-  )] %>%
-  .[opt_w_true < 30, ] %>%
-  ggplot(data = .) +
-  geom_histogram(
-    aes(
-      x = opt_w_true,
-      y = ifelse(after_stat(count) > 0, after_stat(count), NA)
-    ),
-    color = "blue",
-    fill = NA
-  ) +
-  facet_grid(type_txt ~ .) +
-  xlab("Optimal Water Use (inches)") +
-  ylab("Count") +
-  scale_x_continuous(breaks = seq(0, 30, by = 2)) +
-  theme_bw()
+```{r dist-opt-w, fig.cap = "Distribution of optimal water use under no water use constraints", fig.height = 5}
+knitr::include_graphics("figures/g_opt_w_dist.pdf")
 ```
