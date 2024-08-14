@@ -284,15 +284,17 @@ Figure \ref{fig:distributional-equity} presents the cumulative probability of th
 
 \section{Methods}\label{methods}
 
-This section describes the details of the simulation analysis conducted in this article. Our simulation imagines a region with 1000 (denoted as \(N\), hereafter) farmers, where a single water governing body possesses a right to devise groundwater policies. Our simulation considers nine scenarios in total: three different levels of production heterogeneity times three different degrees of measurement errors. Under each scenario, 1000 rounds of individual simulations are run. In each simulation round, average water use and profit are calculated at different levels of water or proxy quota levels for four different policies: water-quota, proxy-quota, water-quota trading, proxy-quota trading. The key components of the simluation analysis are presented below.
+This section describes the details of the simulation analysis conducted in this article. Our simulation imagines a region with 1000 (denoted as \(N\), hereafter) farmers, where a single water governing body possesses a right to devise groundwater policies. Our simulation considers nine scenarios in total: three different levels of production heterogeneity times three different degrees of measurement errors. Under each scenario, 1000 rounds of individual simulations are run. In each simulation round, measurement errors are drawn randomly for the individual farmers, and then average (across the farmers) water use and profit are calculated at different levels of water or proxy quota levels for four different policies: water-quota, proxy-quota, water-quota trading, proxy-quota trading. The summary of the 1000 simulation rounds. The key components of the simluation analysis are presented below.
 
 \subsection{Crop-water production function}\label{crop-water-production-function}
 
-For all \(i \in 1,\dots, N\), the crop-water production function follows the Michelich-Baule functional form presented below(citations).
+For all faemers \(i \in 1,\dots, N\), the crop-water production function follows the Michelich-Baule functional form presented below(citations).
 
 \begin{equation}
 y_i = f_i(w) = \phi_i (1 - \alpha_i \cdot e^{-\beta_i\cdot w})
 \end{equation}
+
+where \(y\) is corn yield (kg/ha), \(w\) is water use (mm), and \(\phi\), \(\alpha\), and \(\beta\) are model parameters that govern how corn yield responds to water use.
 
 Given the price of corn (\(P_c\)) and water (\(P_w\)), farmer \(i\) is assumed to maximize profit by solving the following maximization problem when no water quota is placed:
 
@@ -318,24 +320,14 @@ where \(\eta_i\) is a scalar greater than 0. Measurement error (denoted as \(\mu
 
 While farmers with \(\eta_i > 1\) are unfortunate and their water uses are over-estimated, farmers with \(\eta_i < 1\) are fortunate and their water uses are under-estimated.
 
-Three different sets of the distribution of \(\eta\) are considered that vary in the degree of heterogeneity in \(\eta\): low, medium, and high. For all the sets, \(E[\eta] = 1\) (or equivalently \(E[\mu] = 0\)), meaning that water use estimation is ubiased.
+Three different sets of the distribution of \(\eta\) are considered that vary in the degree of heterogeneity in \(\eta\): low, medium, and high. For all the sets, \(E[\eta] = 1\) (or equivalently \(E[\mu] = 0\)), meaning that water use estimation is ubiased. A sample of the empirical (realized) distribution of \(\eta\) for each of the sets is presented in Figure \ref{fig:dist-eta}.
 
-For a given scenario, the 1000 individual simulation rounds differ only in the realization of randomly drawn values of \(\eta\). A sample of the empirical (realized) distribution of \(\eta\) for each of the sets is presented in Figure \ref{fig:dist-eta}.
+\subsection{Water use under quota and trading systems}\label{water-use-under-quota-and-trading-systems}
 
-\subsection{Water use under a quota system}\label{water-use-under-a-quota-system}
-
-Under both water and proxy quota systems, the same amount of quota is allocated to all the farmers. (this is realistic with insufficient information available to the administrator). For a given water quota of \(\overline{w}\), farmer \(i\)'s water use would be \(min\{w^*, \overline{w}\}\). Under the proxy quota system, the same amount of proxy quota (\(\overline{p}\)) is allocated to all the farmers. However, the effective limit on water use varies by farmer. Water and proxy are assumed to follow the following relationship for farmer \(i\),
-
-\begin{equation}
-w = \eta_i \cdot p
-\end{equation}
-
-Given the proxy quota of \(\overline{p}\), the effective water use limit for farmer \(i\) is \(\overline{p} / \eta_i\), and uses \(min\{w^*, \overline{p} / \eta_i\}\).
+Under both water and proxy quota systems without trading, the same amount of quota is allocated to all the farmers. (this is realistic with insufficient information available to the administrator). For a given water quota of \(\overline{w}\), farmer \(i\)'s water use would be \(min\{w^*, \overline{w}\}\). Under the proxy quota system, the same amount of proxy quota (\(\overline{p}\)) is allocated to all the farmers. However, the effective limit on water use varies by farmer. Given the proxy quota of \(\overline{p}\), the effective water use limit for farmer \(i\) is \(\overline{p} / \eta_i\), and uses \(min\{w^*, \overline{p} / \eta_i\}\).
 
 Assumptions:
 + farmers: has learned the degree of under- or over-estimation of water use compared to actual over the years and has learned how to irrigate up to the water quota
-
-\subsection{Water use under a trading system}\label{water-use-under-a-trading-system}
 
 Under a water trading system, the same amount of water quota is first allocated to all the farmers just like water quota system. However, farmers are now allowed to sell or buy water quota under a water trading system. Assuming no transaction cost of trading, water quota will be traded until the marginal profit of water at their respective level of water uses is equated across the farmers. Let \(\pi_i(w)\) denote farmer \(i\)'s profit: \(P_c \cdot f_i(w) - P_w \cdot w\). Conditional on water quota of \(\overline{w}\), individual water uses for the farmers can be identified by finding a series of water use values (\(w_1, w_2, \dots, w_N\)) that satisfy the following conditions:
 
@@ -351,17 +343,9 @@ Under a proxy trading system, proxy quota will be traded until the marginal prof
 & \sum_{i=1}^N p_i = N \cdot \overline{p}
 \end{align}
 
-\subsection{Simulations}\label{simulations}
-
-We have nine sets of scenarios: three levels of heterogeneity in optimal water use
-
-1000 rounds of simulations were run
-
-. In each of the rounds,
-
 \subsection{Data and Code Availability}\label{data-and-code-availability}
 
-The datasets created in this article are all computer-generated using R codes. All the datasets and codes are available at .
+The datasets created in this article are all computer-generated using R codes. All the datasets and codes are available at the \href{https://github.com/tmieno2/Measurement-Error-Water-Management}{following GitHub repository}.
 
 \clearpage
 
