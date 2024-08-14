@@ -65,38 +65,10 @@ corn_price <- 6 # (bu/acre)
 e_price <- 0.15 # ($/kwh)
 w_price <- e_price * 500 / 12 # ($/inch)
 other_cost <- 800 # ($/acre)
-```
 
+#--- illustration dataset ---#
+load(here::here("Results/illustration_data.RData"))
 
-# Main
-
-## Background
-
-+ intensity estimation accuracy
-+ (estimated) intensity-based vs (estimated) area-based (Southern Europe History)
-+ (estimated) intensity-based vs (true) intensity-based [We work on this]
-
-
-key objective: 
-
-  + start a discussion about the implications of the use of mis-measured water use for water use regulation.
-
-  + shed lights on unintentional consequences of using estiamtes rather than actual measurements
-
-Two policies: 
-  + water quota (examples of existing quota systems)
-  + water permit trading
-
-Lack of measurement. Emergence of Open ET as a substitute.
-
-No clear policy design suggestions on how to use water use estiamtes with measurement errors.
-
-
-# Results
-
-## Profit under water and proxy quota  
-
-```{r}
 sum_res <-
   rbind(
     readRDS(here::here("Results/proxy_results_summary.rds")),
@@ -108,12 +80,44 @@ sum_res <-
   .[, prod_het := factor(prod_het, c("Zero", "Medium", "High"))]
 ```
 
-Figure \@ref(fig:profit-quota-water-het) below compares profit from agricultural production as a function of actual water use between water and proxy quota across three different production heterogeneity levels. When there is no heterogeneity in farmers' production function, water quota is the most cost effective way to achieve a water use reduction goal (highest profit achievable for a given level of actual water use). Under this circumstance, proxy quota with unbiased measurement errors achieves worse than water quota due to asymmetry in downside and upside risk of water use.
 
-```{r profit-quota-water-het, fig.cap = "Comparison of profit from agricultural production between the water and quota systems"}
-knitr::include_graphics("figures/g_profit_quota_w_vs_p.pdf")
+\newpage
+
+# Main
+
+## Background
+
++ intensity estimation accuracy
++ (estimated) intensity-based vs (estimated) area-based (Southern Europe History)
++ (estimated) intensity-based vs (true) intensity-based [We work on this]
+
++ Lack of measurement. Use of water use estimates for water management (current and future). Emergence of Open ET as a substitute.
+
+key objective: 
+
+  + start a discussion about the implications of the use of mis-measured water use for water use regulation.
+
+  + shed lights on unintentional consequences of using estiamtes rather than actual measurements
+
+Two policies: 
+
+  + water quota (examples of existing quota systems)
+  + water permit trading
+
+
+
+No clear policy design suggestions on how to use water use estiamtes with measurement errors.
+
+
+# Results
+
+## Profit under water and proxy quota  
+
+Figure \@ref(fig:profit-quota-water-het) below compares profit from agricultural production as a function of actual water use between water and proxy quota across three different production heterogeneity levels and the size of the measurement errors. When there is no heterogeneity in farmers' production function, water quota is the most cost effective way to achieve a water use reduction goal (highest profit achievable for a given level of actual water use). Under this circumstance, proxy quota with unbiased measurement errors achieves worse than water quota due to asymmetry in downside and upside risk of water use. However, as production heterogeneity increases, water quota loses its comparative advantage over proxy quota. It can be shown that water quota always outperforms proxy quota on average irrespective of the degere of production heterogeneity when measurement error is independent and production function is concave (show proof in appendix). Not surprisingly, profit losses of using proxy quota increase as measurement error size increases. Profit loss of using proxy-based quota tends to become greater as the toal realized water use becomes smaller.
+
+```{r profit-quota-water-het, fig.cap = "The impacts of an increase in the degree of measurement error on profit"}
+knitr::include_graphics("figures/g_profit_quota_comp_stat.pdf")
 ```
-
 
 ```{r}
 #| echo: false
@@ -145,11 +149,17 @@ quota_data <-
   .[quota > opt_w, w := opt_w] %>%
   farm_data[., on = .(w), roll = "nearest"]
 
-pi_dif_2 <- quota_data[farmer == 2 & measure_type == "Proxy", profit] - quota_data[farmer == 2 & measure_type == "Water", profit]
-pi_dif_1 <- quota_data[farmer == 1 & measure_type == "Proxy", profit] - quota_data[farmer == 1 & measure_type == "Water", profit]
+pi_dif_2 <-
+  (quota_data[farmer == 2 & measure_type == "Proxy", profit] - quota_data[farmer == 2 & measure_type == "Water", profit]) %>%
+  round(digits = 1)
+
+pi_dif_1 <-
+  (quota_data[farmer == 1 & measure_type == "Proxy", profit] - quota_data[farmer == 1 & measure_type == "Water", profit]) %>%
+  round(digits = 1)
 ```
 
-Figure \@ref(fig:illust-homegeneous) presents an illustration to build the intuition behind the profit loss due to the use of proxy quota in place of water quota. The red dotted lines indicate the effective water use quota. Under the water quota system, both farmers receive 7 inches of water quota. Since the unconstrained profit maximizing water use is `r round(opt_w, digits = 2)` inches, both farmers use up all the allocated quota and use 10 inches of water. Under the proxy quota system, they are allocated the same amount of proxy quota. However, measurement error in proxy quota resulted in effective water quota of 4 and 10 inches for farmer A and B, respectively. Both farmers use their allocated amout of water. Under both proxy and water quota systems, the total water use is 14 inches. Farmer B makes `r pi_dif_2` less under the water quota system compared to the proxy quota system. However, Farmer A makes `r -pi_dif_1` more under the water quota system compared to the proxy quota system. This comes from an important nature of crop production with respsect to water: declining marginal impact of water on crop yield. As can be seen in the profit-water relationship, removing an inch of water from 6 inches has much larger negative impact compared to revmoing an inch of water from 10 inches.
+We now look at simple two-farm examles to build intuition behind the profit loss due to the use of proxy quota in place of water quota. Figure \@ref(fig:illust-homegeneous) presents a case with two homegeneous farmers under water and proxy quota. The red dotted lines indicate the effective water quota. Under the water quota system, both farmers receive 7 inches of water quota. Since the unconstrained profit maximizing water use is `r round(opt_w, digits = 2)` inches, both farmers use up all the allocated quota and use 10 inches of water. Under the proxy quota system, they are allocated the same amount of proxy quota. However, measurement error in proxy quota resulted in effective water quota of 4 and 10 inches for farmer A and B, respectively. Both farmers use their allocated amout of water. Under both proxy and water quota systems, the total water use is 14 inches. Farmer B makes `r pi_dif_2` less under the water quota system compared to the proxy quota system. However, Farmer A makes `r -pi_dif_1` more under the water quota system compared to the proxy quota system. This comes from an important nature of crop production with respsect to water: declining marginal impact of water on crop yield. As can be seen in the profit-water relationship, removing an inch of water from 6 inches has much larger negative impact compared to revmoing an inch of water from 10 inches.
+
 
 ```{r illust-homegeneous, fig.cap = "Illustration of profit loss due to the use of proxy for quota-based regulation: a case of homegeneous producers"}
 #| warning: false
@@ -164,63 +174,152 @@ However, as the heterogeneity of farmers increases, comparative advantage of wat
 knitr::include_graphics("figures/g_illustration_het.pdf")
 ```
 
-When measurement error is independent and production function is concave, water quota always outperforms proxy quota (show proof in appendix). 
 
-
-## The effect of increasing the size of measurement error
 
 \textbf{Convert $u\_dev$ to $R^2$.} 
 
-```{r increase-me-degree, fig.cap = "The impacts of an increase in the degree of measurement error on profit"}
 
-knitr::include_graphics("figures/g_profit_quota_comp_stat.pdf")
-```
+
+
 
 ## The effect of allowing trading quota
 
-Allowing quota to be traded among farmers can dramatically change the relative performance of the water- and quota-based regulation. Figure \@ref(fig:trading-profit) presents profit for water-based quota, proxy-based quota, water-based quota trading, and proxy-based quota trading regulation systems. As shown in the figure, the disadvantage of using proxy almost disappears when trading of quota is allowed. This is because the inefficiencies in quota allocations are resolved through trading of quota whether it is water or proxy quota. (before trading and after trading?)
+Allowing quota to be traded among farmers can dramatically change the relative performance of the water- and quota-based regulation. Figure \@ref(fig:trading-profit) presents profit for water-based quota, proxy-based quota, water-based quota trading, and proxy-based quota trading regulation systems. As shown in the figure, the disadvantage of using proxy almost disappears when trading of quota is allowed. This is because the inefficiencies in quota allocations are resolved through trading of quota whether it is water or proxy quota.
 
 ```{r trading-profit, fig.cap = "Comparison of profit from agricultural production between the water and quota systems when quota trading is allowed"}
 #| echo: false
 knitr::include_graphics("figures/g_trade_effect_profit.pdf")
 ```
 
-Figure \@ref(fig:trading-profit-illustration) illustrates 
+```{r}
+#| echo: false
 
-```{r trading-profit-illustration, fig.cap = "Illustration of the benefits of trading quota"}
+farmer_A_purchase <-
+  round(proxy_trade_data[farmer == "A", w] - 4, digits = 2)
 
+profit_before_trade_quota <- round(production_at_quota[measure_type == "Proxy", sum(profit)], digits = 2)
+
+profit_after_trade_proxy <- round(proxy_trade_data[, sum(profit)], digits = 2)
+
+profit_after_trade_water <- round(production_at_quota[measure_type == "Water", sum(profit)], digits = 2)
 ```
 
-While water-quota and proxy-quota trading perform about the same, water-quota always leads to a higher total profit for a given level of realized water use. In other words, to achieve a certain water use goal, water-quota trading is always to more cost-effective than proxy-quota trading. Under water-quota trading, the margial profit of water is equalized across the farmers, which is a necessary condition to achieve the highest profit for a given level of total water use. Under proxy-quota trading, the marginal profit of proxy is equalized across the farmers, not the margial profit of water (See Appendix ... for a mathematical proof). However, it is worth emphasizing that the inefficiency caused by the use of proxy is likely to be minimal as shown in Figure \@ref(fig:trading-profit).
+Figure \@ref(fig:trading-profit-illustration) illustrates the impact of allowing for trading proxy quota using the case of two homogeneous farmers illustrated in Figure \@ref(fig:illust-homegeneous). In this illustration, the same water quota of 7 is allocated for both farmers under the water-based systems. No water quota trading would happen as the marginal profit of water is already equated at water use of 7. Under the proxy-base quota system, proxy quota of 7 is allocated for both farmers, but the effective water quota for farmers A and B are 4 and 7, respectively. Once trading of proxy quota is alllowed, farmer A would buy `r farmer_A_purchase` proxy quota from farmer B. At these production levels, the marginal profit of quota (not water) are equated acros the farmers and no further transfer between them would happen. Trading of proxy quota improves the overall profit to `r profit_after_trade_proxy` $/acre from `r profit_before_trade_quota` $/acre. 
 
 
-## Use of proxy can damage distributional equity
+```{r trading-profit-illustration, fig.cap = "Illustration of the benefits of trading quota"}
+#| echo: false
+knitr::include_graphics("figures/g_illustration_homogeneous_with_trade.pdf")
+```
 
-Figure \@ref(fig:distributional-equity) presents the cumulative probability of the ratio of profit under quota-based relative to water-based system for quota (red) and permit trading (blue). Ratio of less than 1 indicates making less profit under the quota-based system compared to the water-based system. If farmers make just as much profir under proxy-based regulation compared to water-based regulation, then the cumulative probability line would be a vertical line at 1. For example, under the high degree of measurement error and medium heterogenenity scenario, some farmers would make about the half of what they would make under the water quota system. At the lower end of the distribution are farmers who would be constrained severely by water use quota, but whose water use estiamtes are much higher than their actual water use. At the higher end of the distribution are farmers who would be constrained by water use quota, but whose water use estiamtes are much lower than their actual water use. Famres who suffer significantly under the quota system can develop strong dissatisfaction of the quota-based regulation system, which in turn may lead to installing water meter themselves. If they discover the over-estimation of their water use, they may appeal to legal actions against the administrator for their unfair treatment. Allowind quota trading greatly diminishes the distributional inequality, though not completely. This is because unfortunate farmers who suffered from over-estimation of their water use can now at least purchase proxy quota to increase their production level.
+While water-quota and proxy-quota trading perform about the same, water-quota always leads to a higher total profit for a given level of realized water use. In other words, to achieve a certain water use goal, water-quota trading is always to more cost-effective than proxy-quota trading. Under water-quota trading, the margial profit of water is equalized across the farmers, which is a necessary condition to achieve the highest profit for a given level of total water use. Under proxy-quota trading, the marginal profit of proxy is equalized across the farmers, not the margial profit of water (See Appendix ... for a mathematical proof). However, it is worth emphasizing that the inefficiency caused by the use of proxy is likely to be minimal as shown in Figure \@ref(fig:trading-profit). This point is well-illustrated in Figure \@ref(fig:trading-profit-illustration), where total profit per acre is `r profit_after_trade_water` and `r profit_after_trade_proxy` under the water-quota and proxy-quota trading system, respsectively. 
 
+Figure \@ref(fig:trading-profit) presents the simualtion results of proxy-quota and water-quota trading systems added to Figure \@ref(fig:profit-quota-water-het). As you can see at all levels of production heterogeneity levels and the degres of measurement errors, proxy-quota and water-quota trading systems perform almost identical at all levels of realized water use (water-quota trading is always slightly better than proxy-quota trading as explained earlier). Not surprisingly, the benefit of allowing for trading is greater when the degree of measurement errors is larger.
+
+## Use of proxy can exercebate distributional inequity
+
+Figure \@ref(fig:distributional-equity) presents the cumulative probability of the ratio of profit under quota-based relative to water-based system for quota (red) and permit trading (blue). Ratio of less than 1 indicates making less profit under the quota-based system compared to the water-based system. If farmers make just as much profir under proxy-based regulation compared to water-based regulation, then the cumulative probability line would be a vertical line at 1. For example, under the high degree of measurement error and medium heterogenenity scenario, some farmers would make about the half of what they would make under the water quota system. At the lower end of the distribution are farmers who would be constrained severely by water quota, but whose water use estiamtes are much higher than their actual water use. At the higher end of the distribution are farmers who would be constrained by water quota, but whose water use estiamtes are much lower than their actual water use. Famres who suffer significantly under the quota system can develop strong dissatisfaction of the quota-based regulation system, which in turn may lead to installing water meter themselves. If they discover the over-estimation of their water use, they may appeal to legal actions against the administrator for their unfair treatment. Allowind quota trading greatly diminishes the distributional inequality, though not completely. This is because unfortunate farmers who suffered from over-estimation of their water use can now at least purchase proxy quota to increase their production level.
 
 ```{r distributional-equity, fig.cap = "Distribution of profit under various regulation systems"}
 knitr::include_graphics("figures/g_profit_ratio.pdf")
 ```
 
-
-
-
 # Discussion
 
-## Limitations
-
-Assumptions.
-Temporal
++ Unbiased proxy 
+  + can hurt profit  
+  + elements that matter
+    + the heterogeneity of production function
+    + the degree of measurement error
++ Allowing quota trading can be particularly beneficial when proxy is used.
+  + Trade-off of implementing quota trading (this is not anything new)
+    + gain in profit from agricultural production
+    + administrative cost
++ Use of proxy exercebates distributional inequality
+  + trading quota can help here again 
+  + greater chance of litigations from farmers against the administrator
++ Limitations
+  + Assumptions (farmers have linked their practice and water use estimates, but not water)
+    + uncertainty in water use estimates lead to under-use of water, harming profit even more
+  + Temporal
+    + one-year decision
+    + other quota designs (multiple year)
 
 # Methods
 
-## 
+This section describes the details of the simulation analysis conducted in this article. Our simulation imagines a region with 1000 (denoted as $N$, hereafter) farmers, where a single water governing body possesses a right to devise groundwater policies. Our simulation considers nine scenarios in total: three different levels of production heterogeneity times three different degrees of measurement errors. Under each scenario, 1000 rounds of individual simulations are run. In each simulation round, average water use and profit are calculated at different levels of water or proxy quota levels for four different policies: water-quota, proxy-quota, water-quota trading, proxy-quota trading. The key components of the simluation analysis are presented below. 
+
+## Crop-water production function
+
+For all $i \in 1,\dots, N$, the crop-water production function follows the Michelich-Baule functional form presented below(citations).
+
+```{=tex}
+\begin{equation}
+y_i = f_i(w) = \phi_i (1 - \alpha_i \cdot e^{-\beta_i\cdot w})
+\end{equation}
+```
+
+Given the price of corn ($P_c$) and water ($P_w$), farmer $i$ is assumed to maximize profit by solving the following maximization problem when no water quota is placed:
+
+```{=tex}
+\begin{equation}
+w^* = argmax_{w} \;\; P_c \cdot f_i(w) - P_w \cdot w
+\end{equation}
+```
+
+Three different sets of the collections of crop-water production functions are generated that vary in the degree of heterogeneity in unconstrained optimal water use ($w^*$). Under no-heterogeneity set, farmers share exactly the same profuction function (the same value of $\phi_i$, $\alpha_i$, and $\beta_i$). Unde the medium-heterogeneity set, model parameters vary and so does $w^*$. Under the high-heterogeneity set, the variance of $w^*$ becomes even greater. The distribution of $w^*$ for each of the sets is presented in Figure \@ref(fig:dist-opt-w).
+
+
+## Measurement error in water use 
+
+When water use values are not measured and observed, the administrator estimates water use. The estimated value of water use is named "proxy" and denoted as $p$. Proxy and water are assumed to follow the relationship below for all the farmers ($i \in 1,\dots, N$):
+
+```{=tex}
+\begin{equation}
+p = \eta_i \cdot w
+\end{equation}
+```
+
+where $\eta_i$ is a scalar greater than 0. Measurement error (denoted as $\mu$) can be written as follows:
+
+```{=tex}
+\begin{equation}
+\mu_i = p - w = (\eta_i - 1)\cdot w
+\end{equation}
+```
+
+While farmers with $\eta_i > 1$ are unfortunate and their water uses are over-estimated, farmers with $\eta_i < 1$ are fortunate and their water uses are under-estimated.
+
+Three different sets of the distribution of $\eta$ are considered that vary in the degree of heterogeneity in $\eta$: low, medium, and high. For all the sets, $E[\eta] = 1$ (or equivalently $E[\mu] = 0$), meaning that water use estimation is ubiased. 
+
+For a given scenario, the 1000 individual simulation rounds differ only in the realization of randomly drawn values of $\eta$. A sample of the empirical (realized) distribution of $\eta$ for each of the sets is presented in Figure \@ref(fig:dist-eta).
+
+## Water use under a quota system
+
+Under both water and proxy quota systems, the same amount of quota is allocated to all the farmers. (this is realistic with insufficient information available to the administrator). For a given water quota of $\overline{w}$, farmer $i$'s water use would be $min\{w^*, \overline{w}\}$. Under the proxy quota system, the same amount of proxy quota ($\overline{p}$) is allocated to all the farmers. However, the effective limit on water use varies by farmer. Given the proxy quota of $\overline{p}$, the effective water use limit for farmer $i$ is $\overline{p} / \eta_i$, and uses $min\{w^*, \overline{p} / \eta_i\}$.
 
 Assumptions: 
-  + farmers: has learned the degree of under- or over-estimation of water use compared to actual over the years and has learned how to irrigate up to the water use quota 
+  + farmers: has learned the degree of under- or over-estimation of water use compared to actual over the years and has learned how to irrigate up to the water quota 
 
+## Water use under a trading system
 
+Under a water trading system, the same amount of water quota is first allocated to all the farmers just like water quota system. However, farmers are now allowed to sell or buy water quota under a water trading system. Assuming no transaction cost of trading, water quota will be traded until the marginal profit of water at their respective level of water uses is equated across the farmers. Let $\pi_i(w)$ denote farmer $i$'s profit: $P_c \cdot f_i(w) - P_w \cdot w$. Conditional on water quota of $\overline{w}$, individual water uses for the farmers can be identified by finding a series of water use values ($w_1, w_2, \dots, w_N$) that satisfy the following conditions:
+
+```{=tex}
+\begin{align}
+& \frac{\partial \pi_1(w)}{\partial w}\Big\rvert_{w = w_1} = \frac{\partial \pi_2(w)}{\partial w}\Big\rvert_{w = w_2} = \dots = \frac{\partial \pi_N(w)}{\partial w}\Big\rvert_{w = w_N} \\
+& \sum_{i=1}^N w_i = N \cdot \overline{w}
+\end{align}
+```
+
+Under a proxy trading system, proxy quota will be traded until the marginal profit of proxy (not water) at their respective level of effective water (or equivalently proxy) uses is equated across the farmers. Conditional on proxy quota of $\overline{p}$, individual proxy use for the farmers can be identified by finding a series of proxy use values ($p_1, p_2, \dots, p_N$) that satisfy the following conditions:
+
+```{=tex}
+\begin{align}
+& \frac{\partial \pi_1(w)}{\partial p}\Big\rvert_{p = p_1} = \frac{\partial \pi_2(w)}{\partial p}\Big\rvert_{p = p_2} = \dots = \frac{\partial \pi_N(w)}{\partial p}\Big\rvert_{p = p_N} \\
+& \sum_{i=1}^N p_i = N \cdot \overline{p}
+\end{align}
+```
 
 ## Data and Code Availability
 
@@ -236,3 +335,11 @@ The datasets created in this article are all computer-generated using R codes. A
 ```{r dist-opt-w, fig.cap = "Distribution of optimal water use under no water use constraints", fig.height = 5}
 knitr::include_graphics("figures/g_opt_w_dist.pdf")
 ```
+
+## Distribution of water-proxy conversion factor
+
+```{r dist-eta, fig.cap = "Distribution of water-proxy conversion factor", fig.height = 5}
+# knitr::include_graphics("figures/g_eta_dist.pdf")
+```
+
+\clearpage

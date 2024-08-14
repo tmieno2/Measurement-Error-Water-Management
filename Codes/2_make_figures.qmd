@@ -69,6 +69,146 @@ ggsave(here::here("Writing/figures/g_opt_w_dist.pdf"), g_opt_w_dist, height = 5,
 
 # Visualize: Results
 
+## Profitability: Water vs Proxy Quota (with comparative statistics wrt heterogeneity of farmers)
+
+```{r}
+w_p_plot_data <-
+  sum_res %>%
+  .[instrument_type == "Quota", ] %>%
+  .[(dir_cor == "0" & u_dev == 0.3 & measure_type == "Proxy") | measure_type == "Water", ]
+
+y_lims <- w_p_plot_data[, c(floor(min(profit / 10)), ceiling(max(profit / 10)))] * 10
+
+(
+  g_profit_quota_w_vs_p <-
+    ggplot(data = w_p_plot_data) +
+    geom_line(aes(y = profit, x = w, color = measure_type)) +
+    facet_grid(. ~ prod_het) +
+    ylab("Target Water Use (inches)") +
+    xlab("Realized Water Use (inches)") +
+    scale_color_discrete(name = "Measurement Type") +
+    scale_y_continuous(
+      breaks = seq(y_lims[1], y_lims[2], by = 10)
+    ) +
+    theme_bw() +
+    theme(
+      legend.position = "bottom"
+    )
+)
+
+ggsave("Writing/figures/g_profit_quota_w_vs_p.pdf", g_profit_quota_w_vs_p, height = 3.5, width = 6)
+```
+
+## The effect of increasing the size of measurement error
+
+```{r}
+q_udev <- sum_res[(dir_cor == "0" & measure_type == "Proxy"), ]
+w_udev <-
+  sum_res[measure_type == "Water", ] %>%
+  .[, u_dev := NULL] %>%
+  expand_grid_df(., data.table(u_dev = c(0.1, 0.3, 0.5)))
+
+quota_plot_data_comp_stat <-
+  rbind(q_udev, w_udev) %>%
+  .[instrument_type == "Quota", ]
+
+y_lims <- quota_plot_data_comp_stat[, c(floor(min(profit / 10)), ceiling(max(profit / 10)))] * 10
+
+
+(
+  g_profit_quota_comp_stat <-
+    ggplot(data = quota_plot_data_comp_stat) +
+    geom_line(aes(y = profit, x = w, color = measure_type)) +
+    facet_grid(u_dev ~ prod_het) +
+    ylab("Profit ($/acre)") +
+    xlab("Realized Water Use (inches)") +
+    scale_color_discrete(name = "Measurement Type") +
+    scale_y_continuous(
+      breaks = seq(y_lims[1], y_lims[2], by = 10)
+    ) +
+    scale_x_continuous(breaks = 7:12) +
+    theme_bw() +
+    theme(
+      legend.position = "bottom",
+      panel.grid.minor = element_blank(),
+      panel.spacing.y = unit(1, "lines")
+    )
+)
+
+ggsave("Writing/figures/g_profit_quota_comp_stat.pdf", g_profit_quota_comp_stat, height = 6, width = 6)
+```
+
+## The effect of allowing trading quota
+
+```{r}
+#| echo: false
+q_temp <- sum_res[(dir_cor == "0" & u_dev != 0 & measure_type == "Proxy"), ]
+w_temp <-
+  sum_res[measure_type == "Water", ] %>%
+  .[, u_dev := NULL] %>%
+  expand_grid_df(., data.table(u_dev = c(0.1, 0.3, 0.5)))
+
+trading_plot_data <-
+  rbind(w_temp, q_temp) %>%
+  .[, type := paste0(measure_type, "-", instrument_type)]
+
+y_lims <- trading_plot_data[, c(floor(min(profit / 10)), ceiling(max(profit / 10)))] * 10
+
+(
+  g_trade_effect_profit <-
+    ggplot(data = trading_plot_data) +
+    geom_line(aes(y = profit, x = w, color = type)) +
+    facet_grid(u_dev ~ prod_het) +
+    scale_color_brewer(palette = "Set1") +
+    ylab("Profit ($/acre)") +
+    xlab("Realized Water Use (inches)") +
+    scale_color_discrete(name = "Measurement Type") +
+    guides(color = guide_legend(nrow = 2, byrow = TRUE)) +
+    theme_bw() +
+    scale_y_continuous(
+      breaks = seq(y_lims[1], y_lims[2], by = 10)
+    ) +
+    scale_x_continuous(breaks = 7:12) +
+    theme_bw() +
+    theme(
+      legend.position = "bottom",
+      panel.grid.minor = element_blank(),
+      panel.spacing.y = unit(1, "lines")
+    )
+)
+
+ggsave("Writing/figures/g_trade_effect_profit.pdf", g_trade_effect_profit, height = 6, width = 6)
+```
+
+## Profit Ratio (distributional inequality)
+
+```{r}
+profit_ratio <- readRDS(here::here("Results/profit_ratio.rds"))
+
+x_breaks <- seq(0.2, ceiling(profit_ratio[, max(ratio)]), by = 0.4)
+
+(
+  g_profit_ratio <-
+    ggplot(profit_ratio) +
+    geom_line(aes(x = ratio, y = prob, color = instrument_type)) +
+    facet_grid(u_dev ~ prod_het) +
+    xlab("Ratio of Profit under Proxy-based to Water-based systems") +
+    ylab("Cumulative Probability") +
+    scale_color_discrete(name = "Insturment Type") +
+    theme_bw() +
+    scale_x_continuous(breaks = x_breaks) +
+    scale_y_continuous(breaks = seq(0, 1, by = 0.25)) +
+    theme(
+      legend.position = "bottom",
+      panel.grid.minor = element_blank(),
+      panel.spacing.y = unit(0.5, "lines"),
+      panel.spacing.x = unit(0.6, "lines")
+    )
+)
+ggsave("Writing/figures/g_profit_ratio.pdf", g_profit_ratio, height = 6, width = 6)
+```
+
+
 # Visualize: Illustration
 
 Here, illustrative figures to gain insights into the underlying economic intuitions of the results are created.
@@ -131,7 +271,8 @@ production_at_quota <-
   ) %>%
   .[, w := quota] %>%
   .[quota > opt_w, w := opt_w] %>%
-  farm_data_1[., on = .(w), roll = "nearest"]
+  farm_data_1[., on = .(w), roll = "nearest"] %>%
+  .[, instrument_type := "Quota"]
 ```
 
 Visualize the production data.
@@ -161,10 +302,19 @@ Visualize the production data.
     ylim(0, NA) +
     xlab("Water Use (inches)") +
     ylab("Profit ($/acre)") +
-    theme_bw()
+    theme_bw() +
+    scale_x_continuous(breaks = 0:15) +
+    scale_y_continuous(
+      breaks = (0:10) * 50,
+      limits = c(0, NA)
+    ) +
+    theme(
+      legend.position = "bottom",
+      panel.grid.minor = element_blank()
+    )
 )
 
-ggsave("Writing/figures/g_illustration_homogeneous.pdf", g_illustration_homogeneous, height = 4, width = 6)
+ggsave("Writing/figures/g_illustration_homogeneous.pdf", g_illustration_homogeneous, height = 4.5, width = 6.5)
 ```
 
 ## Homogeneous farmers under quota trading
@@ -188,12 +338,12 @@ $$
 farm_data_A <-
   copy(farm_data_1) %>%
   .[, farmer := "A"] %>%
-  .[, marginal_profit_p := marginal_profit_w / w_A * p_A]
+  .[, marginal_profit_p := marginal_profit_w / w_A * eW_A]
 
 farm_data_B <-
   copy(farm_data_1) %>%
   .[, farmer := "B"] %>%
-  .[, marginal_profit_p := marginal_profit_w / w_B * p_B]
+  .[, marginal_profit_p := marginal_profit_w / w_B * eW_B]
 ```
 
 Find the results of proxy quota trading, at which the marginal profit of proxy is equalized between the farmers.
@@ -241,7 +391,7 @@ Visualize the trading results.
 
 ```{r}
 (
-  g_illustration_homogeneous <-
+  g_illustration_homogeneous_with_trade <-
     ggplot() +
     geom_line(
       data = farm_data_1,
@@ -251,25 +401,56 @@ Visualize the trading results.
       data = production_at_quota,
       aes(xintercept = quota),
       linetype = 2,
-      color = "red"
+      color = "blue",
+      linewidth = 0.4
+    ) +
+    geom_vline(
+      data = proxy_trade_data,
+      aes(xintercept = w),
+      linetype = 2,
+      color = "blue",
+      linewidth = 0.4
     ) +
     geom_point(
       data = production_at_quota,
-      aes(y = profit, x = w),
-      color = "blue",
-      size = 2
+      aes(y = profit, x = w, color = instrument_type),
+      size = 3
     ) +
     geom_point(
-      data = proxy_trade_data, 
-      aes(x = w, y = profit)
+      data = proxy_trade_data,
+      aes(x = w, y = profit, color = instrument_type),
+      size = 3
+    ) +
+    geom_segment(
+      data = data.table(
+        x = production_at_quota[measure_type == "Proxy", w],
+        y = c(200, 200),
+        xend = proxy_trade_data[measure_type == "Proxy", w],
+        yend = c(200, 200),
+        measure_type = c("Proxy", "Proxy"),
+        farmer = c("A", "B")
+      ),
+      aes(x = x, y = y, xend = xend, yend = yend),
+      arrow = arrow(length = unit(0.3, "cm"))
     ) +
     facet_grid(measure_type ~ farmer) +
-    ylim(0, NA) +
     xlab("Water Use (inches)") +
     ylab("Profit ($/acre)") +
-    theme_bw()
+    theme_bw() +
+    scale_color_discrete(name = "Instrument Type") +
+    scale_x_continuous(breaks = 0:15) +
+    scale_y_continuous(
+      breaks = (0:10) * 50,
+      limits = c(0, NA)
+    ) +
+    theme(
+      legend.position = "bottom",
+      panel.grid.minor = element_blank()
+    )
 
 )
+
+ggsave("Writing/figures/g_illustration_homogeneous_with_trade.pdf", g_illustration_homogeneous_with_trade, height = 5, width = 6.5)
 ```
 
 ## Heterogeneous farmers under quota
@@ -302,7 +483,7 @@ quota_data_het <-
   data.table(
     farmer_txt = c("A", "B", "A", "B"),
     measure_type = c("Water", "Water", "Proxy", "Proxy"),
-    quota = c(w_A, w_B, p_A, p_B)
+    quota = c(w_A, w_B, eW_A, eW_B)
   ) %>%
   opt_w[., on = .(farmer_txt)] %>%
   .[, w := quota] %>%
@@ -345,8 +526,23 @@ Visualize the production data.
     ylim(0, NA) +
     xlab("Water Use (inches)") +
     ylab("Profit ($/acre)") +
-    theme_bw()
+    theme_bw() +
+    scale_x_continuous(breaks = 0:15) +
+    scale_y_continuous(
+      breaks = (0:10) * 50,
+      limits = c(0, NA)
+    ) +
+    theme(
+      legend.position = "bottom",
+      panel.grid.minor = element_blank()
+    )
 )
 
-ggsave("Writing/figures/g_illustration_het.pdf", g_illustration_het, height = 4, width = 6)
+ggsave("Writing/figures/g_illustration_het.pdf", g_illustration_het, height = 4.5, width = 6.5)
+```
+
+## Save all the illustration datasets
+
+```{r}
+save(production_at_quota, proxy_trade_data, farm_data_het, quota_data_het, farm_data_1, file = "Results/illustration_data.RData")
 ```
