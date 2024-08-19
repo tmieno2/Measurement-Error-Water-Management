@@ -1,0 +1,88 @@
+---
+title: "Hello Typst!"
+author:
+  - name: "Taro Mieno^[University of Nebraska-Lincoln, Email: tmieno2@unl.edu]"
+    orcid: 0000-0003-1689-0557
+  - name: Timothy Foster^[University of Mancherster]
+    orcid: 0000-0003-1689-0557
+  - name: Nicholas Brozovic^[University of Nebraska-Lincoln]
+    orcid: 0000-0003-1689-0557
+format:
+  typst:
+    toc: false
+    keep-typ: true
+    section-numbering: 1.1.a
+    columns: 1
+    fig-format: png
+bibliography: DRA.bib
+bibliographystyle: apa
+---
+
+```{r packages}
+#| include: false
+#| cache: false
+
+#--- packages ---#
+library(here)
+library(dplyr)
+
+source("../Codes/functions/functions.R")
+```
+
+```{r setup-main}
+#| include: false
+#| cache: false
+
+library(knitr)
+
+opts_chunk$set(
+  fig.align = "center",
+  fig.retina = 5,
+  fig.width = 6,
+  fig.height = 4.5,
+  fig.pos = "H",
+  out.extra = "",
+  warning = FALSE,
+  message = FALSE,
+  echo = FALSE,
+  cache = FALSE
+)
+
+options(knitr.duplicate.label = "allow")
+```
+
+```{r read_results}
+#--- prices ---#
+corn_price <- 6 # (bu/acre)
+e_price <- 0.15 # ($/kwh)
+w_price <- e_price * 500 / 12 # ($/inch)
+other_cost <- 800 # ($/acre)
+
+#--- illustration dataset ---#
+load(here::here("Results/illustration_data.RData"))
+
+sum_res <-
+  rbind(
+    readRDS(here::here("Results/proxy_results_summary.rds")),
+    readRDS(here::here("Results/water_results_summary.rds"))
+  ) %>%
+  .[, dir_cor_txt := paste0("Correlation: ", dir_cor)] %>%
+  .[, dir_cor_txt := factor(dir_cor_txt, levels = paste0("Correlation: ", c("-", "0", "+")))] %>%
+  .[, prod_het := str_to_title(prod_het)] %>%
+  .[, prod_het := factor(prod_het, c("Zero", "Medium", "High"))]
+```
+
+
+# Results
+
+## Profit under water and proxy quota  
+
+@fig-profit-quota-water-het below compares profit from agricultural production as a function of actual water use between water and proxy quota across three different production heterogeneity levels and the size of the measurement errors. When there is no heterogeneity in farmers' production function, water quota is the most cost effective way to achieve a water use reduction goal (highest profit achievable for a given level of actual water use). Under this circumstance, proxy quota with unbiased measurement errors achieves worse than water quota due to asymmetry in downside and upside risk of water use. However, as production heterogeneity increases, water quota loses its comparative advantage over proxy quota. It can be shown that water quota always outperforms proxy quota on average irrespective of the degere of production heterogeneity when measurement error is independent and production function is concave (show proof in appendix). Not surprisingly, profit losses of using proxy quota increase as measurement error size increases. Profit loss of using proxy-based quota tends to become greater as the toal realized water use becomes smaller.
+
+```{r}
+#| label: fig-profit-quota-water-het
+#| fig-cap: "The impacts of an increase in the degree of measurement error on profit"
+knitr::include_graphics("figures/g_profit_quota_comp_stat.png")
+```
+
+@grafton2018paradox

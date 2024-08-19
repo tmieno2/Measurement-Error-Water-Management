@@ -67,7 +67,7 @@ e_price <- 0.15 # ($/kwh)
 w_price <- e_price * 500 / 12 # ($/inch)
 other_cost <- 800 # ($/acre)
 
-save(corn_price, e_price, w_price, other_cost)
+# save(corn_price, e_price, w_price, other_cost)
 ```
 
 ## Farmers yield response functions
@@ -166,7 +166,7 @@ Generate production data where yield, profit, marginal profit of water (and othe
 ```{r}
 #| eval: false
 
-set.seed(812614) 
+set.seed(812614)
 
 system_data <-
   par_set %>%
@@ -233,6 +233,8 @@ par_data <-
     u_dev = c(0, 0.1, 0.3, 0.5),
     dir_cor = c("+", "-", "0")
   )
+
+saveRDS(par_data, "Results/parameter_data.rds")
 ```
 
 When `dir_cor = -` and `u_dev = 0`, measurement error is set so that the ratio of effective water use to proxy (`target_w`) is the same across farmers. For example, when `target_w` is the same as the average optimal water use, effective water use limit allocation maximizes social welfare (same as proxy permit trading). When `dir_cor = 0` and `u_dev = 0`, the quota system is simply a uniform quota system.
@@ -257,7 +259,12 @@ par_sets_w <- par_data[u_dev == 0 & dir_cor == "0", ]
 results_w <-
   system_data %>%
   dplyr::mutate(results = list(
-    run_analysis(parameter_sets = par_sets_w, farmer_data, prod_data, num_it = 1)
+    run_analysis(
+      parameter_sets = par_sets_w,
+      farmer_data,
+      prod_data,
+      num_it = 1
+    )
   )) %>%
   dplyr::select(prod_het, results) %>%
   unnest(cols = c(results)) %>%
@@ -279,7 +286,13 @@ set.seed(7845239)
 results_p <-
   system_data %>%
   dplyr::mutate(results = list(
-    run_analysis(parameter_sets = par_sets_p, farmer_data, prod_data, num_it = 100, num_cores = 8)
+    run_analysis(
+      parameter_sets = par_sets_p, 
+      farmer_data, 
+      prod_data, 
+      num_it = 1000, 
+      num_cores = parallel::detectCores() - 2
+    )
   )) %>%
   dplyr::select(prod_het, results) %>%
   unnest(cols = c(results)) %>%
@@ -709,7 +722,7 @@ proxy_trade_data <-
   .[, measure_type := "Proxy"]
 
 g_illustration_homogeneous +
-  geom_point(data = proxy_trade_data, aes(x = w, y = profit)) 
+  geom_point(data = proxy_trade_data, aes(x = w, y = profit))
 ```
 
 

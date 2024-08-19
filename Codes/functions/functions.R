@@ -88,11 +88,6 @@ run_analysis <- function(parameter_sets, farmer_data, prod_data, num_it = 1, num
             num_it = num_it
           )
 
-        # temp <-
-        #   copy(quota_data) %>%
-        #   .[, w := rnorm(.N, 12, sd = 3)] %>%
-        #   .[, est_w := w / proxy_to_water]
-        
         # lm(est_w ~ w, data = temp) %>% summary() %>% .$r.squared
 
         #--- analysis ---#
@@ -129,8 +124,8 @@ run_analysis_by_case <- function(prod_data, quota_data) {
           copy(prod_data) %>%
           quota_data[case == x, ][., on = "farmer"] %>%
           #--- proxy use ---#
-          .[, proxy := w / proxy_to_water] %>%
-          .[, marginal_profit_p := proxy_to_water * marginal_profit_w]
+          .[, proxy := w * water_to_proxy] %>%
+          .[, marginal_profit_p := marginal_profit_w / water_to_proxy]
 
         #---------------------
         #- Quota Analysis
@@ -207,7 +202,7 @@ make_quota_data <- function(farmer_data, target_w, u_dev, cor, num_it = 100) {
           copy(farmer_data)[, .(farmer, opt_w)] %>%
             .[, dev_from_mean := (opt_w - mean(opt_w)) / mean_opt_w * target_w] %>%
             #--- effective water use limit ---#
-            .[, w_lim := (target_w + dev_from_mean) * runif(1, min = 1 - u_dev, max = 1 + u_dev), by = farmer]
+            .[, w_lim := (target_w + dev_from_mean) / runif(1, min = 1 - u_dev, max = 1 + u_dev), by = farmer]
         }
       )
   } else if (cor == "-") {
@@ -218,7 +213,7 @@ make_quota_data <- function(farmer_data, target_w, u_dev, cor, num_it = 100) {
           copy(farmer_data)[, .(farmer, opt_w)] %>%
             .[, dev_from_mean := (opt_w - mean(opt_w)) / mean_opt_w * target_w] %>%
             #--- effective water use limit ---#
-            .[, w_lim := (target_w - dev_from_mean) * runif(1, min = 1 - u_dev, max = 1 + u_dev), by = farmer]
+            .[, w_lim := (target_w - dev_from_mean) / runif(1, min = 1 - u_dev, max = 1 + u_dev), by = farmer]
         }
       )
   } else if (cor == "0") {
@@ -228,7 +223,7 @@ make_quota_data <- function(farmer_data, target_w, u_dev, cor, num_it = 100) {
         \(x) {
           copy(farmer_data)[, .(farmer)] %>%
             #--- effective water use limit ---#
-            .[, w_lim := target_w * runif(1, min = 1 - u_dev, max = 1 + u_dev), by = farmer]
+            .[, w_lim := target_w / runif(1, min = 1 - u_dev, max = 1 + u_dev), by = farmer]
         }
       )
   }
@@ -238,9 +233,8 @@ make_quota_data <- function(farmer_data, target_w, u_dev, cor, num_it = 100) {
     data.table::rbindlist(idcol = "case") %>%
     .[, w_lim := w_lim / mean(w_lim) * target_w, by = case] %>%
     #--- water to proxy conversion factor ---#
-    # multiply proxy with proxy_to_water (eta) to get water use
-    .[, proxy_to_water := w_lim / target_w] %>%
-    .[, .(farmer, w_lim, proxy_to_water, case)] %>%
+    .[, water_to_proxy := w_lim / target_w] %>%
+    .[, .(farmer, w_lim, water_to_proxy, case)] %>%
     .[, target_w := target_w]
 
   return(return_data)

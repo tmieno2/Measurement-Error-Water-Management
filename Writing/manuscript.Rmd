@@ -278,7 +278,7 @@ When water use values are not measured and observed, the administrator estimates
 
 ```{=tex}
 \begin{equation}
-p = \eta_i \cdot w
+p = \eta_i\cdot w
 \end{equation}
 ```
 

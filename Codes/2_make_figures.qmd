@@ -67,6 +67,56 @@ load(here::here("Results/prices_costs.RData"))
 ggsave(here::here("Writing/figures/g_opt_w_dist.pdf"), g_opt_w_dist, height = 5, width = 6)
 ```
 
+
+## Distribution of water-proxy conversion factor
+
+```{r}
+par_data <-
+  readRDS("Results/parameter_data.rds") %>%
+  .[u_dev != 0, ] %>%
+  .[dir_cor == "0", ] %>%
+  .[target_w == 7, ] %>%
+  .[, ]
+
+eta_data <-
+  lapply(
+    1:nrow(par_data),
+    \(x) {
+      quota_data <-
+        make_quota_data(
+          system_data$farmer_data[[1]],
+          target_w = par_data[x, target_w],
+          u_dev = par_data[x, u_dev],
+          cor = par_data[x, dir_cor],
+          num_it = 1
+        ) %>%
+        .[, u_dev := par_data[x, u_dev]]
+    }
+  ) %>%
+  rbindlist() %>%
+  .[, med_txt := case_when(
+    u_dev == 0.1 ~ "ME: Low",
+    u_dev == 0.3 ~ "ME: Medium",
+    u_dev == 0.5 ~ "ME: High"
+  )] %>%
+  .[, med_txt := factor(med_txt, levels = c("ME: Low", "ME: Medium", "ME: High"))]
+
+ggplot(eta_data) +
+  geom_histogram(
+    aes(
+      x = proxy_to_water,
+      y = ifelse(after_stat(count) > 0, after_stat(count), NA)
+    ),
+    color = "blue",
+    fill = NA
+  ) +
+  facet_grid(med_txt ~ .) +
+  theme_bw() +
+  xlab("Water to proxy conversion factor") +
+  ylab("Count")
+
+```
+
 # Visualize: Results
 
 ## Profitability: Water vs Proxy Quota (with comparative statistics wrt heterogeneity of farmers)
@@ -136,6 +186,8 @@ y_lims <- quota_plot_data_comp_stat[, c(floor(min(profit / 10)), ceiling(max(pro
 )
 
 ggsave("Writing/figures/g_profit_quota_comp_stat.pdf", g_profit_quota_comp_stat, height = 6, width = 6)
+
+ggsave("Writing/figures/g_profit_quota_comp_stat.png", g_profit_quota_comp_stat, width = 6, height = 6, dpi = 400)
 ```
 
 ## The effect of allowing trading quota

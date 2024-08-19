@@ -8,7 +8,7 @@ Suppose measurement error is unbiased and independent. Further assume that the e
 
 **Definitions:**
 
-$$
+$ub
 y_i = f_i(w)
 $$
 
