@@ -216,7 +216,7 @@ While water-quota and proxy-quota trading perform about the same, water-quota al
 
 Figure \@ref(fig:trading-profit) presents the simualtion results of proxy-quota and water-quota trading systems added to Figure \@ref(fig:profit-quota-water-het). As you can see at all levels of production heterogeneity levels and the degres of measurement errors, proxy-quota and water-quota trading systems perform almost identical at all levels of realized water use (water-quota trading is always slightly better than proxy-quota trading as explained earlier). Not surprisingly, the benefit of allowing for trading is greater when the degree of measurement errors is larger.
 
-## Use of proxy can exercebate distributional inequity
+## Use of proxy can exercebate distributional inequlity
 
 Figure \@ref(fig:distributional-equity) presents the cumulative probability of the ratio of profit under quota-based relative to water-based system for quota (red) and permit trading (blue). Ratio of less than 1 indicates making less profit under the quota-based system compared to the water-based system. If farmers make just as much profir under proxy-based regulation compared to water-based regulation, then the cumulative probability line would be a vertical line at 1. For example, under the high degree of measurement error and medium heterogenenity scenario, some farmers would make about the half of what they would make under the water quota system. At the lower end of the distribution are farmers who would be constrained severely by water quota, but whose water use estiamtes are much higher than their actual water use. At the higher end of the distribution are farmers who would be constrained by water quota, but whose water use estiamtes are much lower than their actual water use. Famres who suffer significantly under the quota system can develop strong dissatisfaction of the quota-based regulation system, which in turn may lead to installing water meter themselves. If they discover the over-estimation of their water use, they may appeal to legal actions against the administrator for their unfair treatment. Allowind quota trading greatly diminishes the distributional inequality, though not completely. This is because unfortunate farmers who suffered from over-estimation of their water use can now at least purchase proxy quota to increase their production level.
 
@@ -319,7 +319,7 @@ Under a proxy trading system, proxy quota will be traded until the marginal prof
 \end{align}
 ```
 
-## Data and Code Availability
+## Data and code availability
 
 The datasets created in this article are all computer-generated using R (citation). All the codes and datasets are available at [this GitHub repository](https://github.com/tmieno2/Measurement-Error-Water-Management). Instructions for reproducing all the outputs presented in this article are provided at the bottom of the page.
 

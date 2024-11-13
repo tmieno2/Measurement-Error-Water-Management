@@ -290,7 +290,7 @@ results_p <-
       parameter_sets = par_sets_p, 
       farmer_data, 
       prod_data, 
-      num_it = 1000, 
+      num_it = 100, 
       num_cores = parallel::detectCores() - 2
     )
   )) %>%
@@ -340,6 +340,8 @@ sum_res <-
   .[, dir_cor_txt := factor(dir_cor_txt, levels = paste0("Correlation: ", c("-", "0", "+")))] %>%
   .[, prod_het := str_to_title(prod_het)] %>%
   .[, prod_het := factor(prod_het, c("Zero", "Medium", "High"))]
+
+saveRDS(sum_res, here::here("Results/results_summary.rds"))
 ```
 
 ## Profitability: Water vs Proxy Quota (with comparative statistics wrt heterogeneity of farmers)

@@ -64,7 +64,7 @@ load(here::here("Results/prices_costs.RData"))
     theme_bw()
 )
 
-ggsave(here::here("Writing/figures/g_opt_w_dist.pdf"), g_opt_w_dist, height = 5, width = 6)
+ggsave(here::here("Writing/figures/g_opt_w_dist.png"), g_opt_w_dist, height = 5, width = 6, dpi = 400)
 ```
 
 
@@ -146,7 +146,7 @@ y_lims <- w_p_plot_data[, c(floor(min(profit / 10)), ceiling(max(profit / 10)))]
     )
 )
 
-ggsave("Writing/figures/g_profit_quota_w_vs_p.pdf", g_profit_quota_w_vs_p, height = 3.5, width = 6)
+ggsave("Writing/figures/g_profit_quota_w_vs_p.png", g_profit_quota_w_vs_p, height = 3.5, width = 6, dpi = 400)
 ```
 
 ## The effect of increasing the size of measurement error
@@ -229,7 +229,7 @@ y_lims <- trading_plot_data[, c(floor(min(profit / 10)), ceiling(max(profit / 10
     )
 )
 
-ggsave("Writing/figures/g_trade_effect_profit.pdf", g_trade_effect_profit, height = 6, width = 6)
+ggsave("Writing/figures/g_trade_effect_profit.png", g_trade_effect_profit, height = 6, width = 6, dpi = 400)
 ```
 
 ## Profit Ratio (distributional inequality)
@@ -257,7 +257,7 @@ x_breaks <- seq(0.2, ceiling(profit_ratio[, max(ratio)]), by = 0.4)
       panel.spacing.x = unit(0.6, "lines")
     )
 )
-ggsave("Writing/figures/g_profit_ratio.pdf", g_profit_ratio, height = 6, width = 6)
+ggsave("Writing/figures/g_profit_ratio.png", g_profit_ratio, height = 6, width = 6, dpi = 400)
 ```
 
 
@@ -366,7 +366,7 @@ Visualize the production data.
     )
 )
 
-ggsave("Writing/figures/g_illustration_homogeneous.pdf", g_illustration_homogeneous, height = 4.5, width = 6.5)
+ggsave("Writing/figures/g_illustration_homogeneous.png", g_illustration_homogeneous, height = 4.5, width = 6.5, dpi = 400)
 ```
 
 ## Homogeneous farmers under quota trading
@@ -502,7 +502,7 @@ Visualize the trading results.
 
 )
 
-ggsave("Writing/figures/g_illustration_homogeneous_with_trade.pdf", g_illustration_homogeneous_with_trade, height = 5, width = 6.5)
+ggsave("Writing/figures/g_illustration_homogeneous_with_trade.png", g_illustration_homogeneous_with_trade, height = 5, width = 6.5, dpi = 400)
 ```
 
 ## Heterogeneous farmers under quota
@@ -590,7 +590,7 @@ Visualize the production data.
     )
 )
 
-ggsave("Writing/figures/g_illustration_het.pdf", g_illustration_het, height = 4.5, width = 6.5)
+ggsave("Writing/figures/g_illustration_het.png", g_illustration_het, height = 4.5, width = 6.5, dpi = 400)
 ```
 
 ## Save all the illustration datasets
